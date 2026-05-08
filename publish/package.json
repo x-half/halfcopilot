@@ -1,0 +1,32 @@
+{
+  "name": "halfcopilot",
+  "version": "0.0.1",
+  "description": "HalfCopilot — Multi-model Agent Framework CLI with Hybrid Mode",
+  "type": "module",
+  "bin": {
+    "halfcop": "./bin/halfcop.js",
+    "halfcopilot": "./bin/halfcop.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "ink": "^4.4.0",
+    "react": "^18.3.0",
+    "openai": "^4.77.0",
+    "@anthropic-ai/sdk": "^0.36.0",
+    "zod": "^3.24.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": ["agent", "cli", "ai", "multi-model", "copilot", "code-assistant"],
+  "author": "HalfCopilot Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/halfcopilot/halfcopilot"
+  }
+}

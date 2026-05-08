@@ -1,0 +1,47 @@
+{
+  "name": "halfcopilot",
+  "version": "1.0.0",
+  "description": "HalfCopilot — Multi-model Agent Framework CLI with Beautiful Chat Interface",
+  "type": "module",
+  "bin": {
+    "halfcop": "./bin/halfcop.js",
+    "halfcopilot": "./bin/halfcop.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@halfcopilot/shared": "file:./dist/packages/shared/dist",
+    "@halfcopilot/config": "file:./dist/packages/config/dist",
+    "@halfcopilot/provider": "file:./dist/packages/provider/dist",
+    "@halfcopilot/tools": "file:./dist/packages/tools/dist",
+    "@halfcopilot/core": "file:./dist/packages/core/dist",
+    "@halfcopilot/memory": "file:./dist/packages/memory/dist",
+    "@halfcopilot/mcp": "file:./dist/packages/mcp/dist",
+    "@halfcopilot/skills": "file:./dist/packages/skills/dist",
+    "@halfcopilot/cli": "file:./dist/packages/cli/dist",
+    "commander": "^12.0.0",
+    "openai": "^4.77.0",
+    "@anthropic-ai/sdk": "^0.36.0",
+    "zod": "^3.24.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "agent", "cli", "ai", "multi-model", "copilot",
+    "code-assistant", "deepseek", "openai", "anthropic"
+  ],
+  "author": "HalfCopilot Team",
+  "license": "MIT",
+  "repository": "https://github.com/halfcopilot/halfcopilot",
+  "homepage": "https://github.com/halfcopilot/halfcopilot"
+}
