@@ -11,7 +11,6 @@ import { pathToFileURL } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Use pathToFileURL for Windows compatibility
 const mainPath = join(__dirname, '..', 'dist', 'packages', 'cli', 'dist', 'halfcop.js');
 const mainModule = pathToFileURL(mainPath).href;
 

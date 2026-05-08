@@ -44,6 +44,7 @@ export class AgentLoop {
       });
 
       let fullText = '';
+      let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
 
       for await (const event of stream) {
         if (event.type === 'text') {
@@ -61,9 +62,10 @@ export class AgentLoop {
           const toolInput = event.input;
 
           yield { type: 'tool_use', toolName, toolInput };
+          toolUses.push({ id: event.id, name: toolName, input: toolInput });
 
           if (this.currentMode === 'plan' && !PLAN_SAFE_TOOLS.includes(toolName)) {
-            const msg = `Tool "${toolName}" is not allowed in plan mode. Switch to act mode to execute.`;
+            const msg = `Tool "${toolName}" not allowed in plan mode.`;
             yield { type: 'tool_result', toolName, toolOutput: msg };
             this.conversation.addToolResult(event.id, msg, true);
             continue;
@@ -94,10 +96,20 @@ export class AgentLoop {
 
         if (event.type === 'done') {
           this.conversation.addTokenUsage(event.usage);
-          if (!hasToolUse) {
-            if (fullText) {
-              this.conversation.addAssistantMessage(fullText);
+
+          if (hasToolUse) {
+            // Build one assistant message with text + all tool_uses
+            const blocks: any[] = [];
+            if (fullText) blocks.push({ type: 'text', text: fullText });
+            for (const tu of toolUses) {
+              blocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
             }
+            this.conversation.addAssistantMessage(blocks);
+          } else if (fullText) {
+            this.conversation.addAssistantMessage(fullText);
+          }
+
+          if (!hasToolUse) {
             this.currentState = AgentState.IDLE;
             yield { type: 'state_change', state: AgentState.IDLE };
             yield { type: 'done', usage: event.usage };
@@ -132,30 +144,20 @@ export class AgentLoop {
   }
 
   private getSystemPrompt(): string {
-    const basePrompt = this.config.systemPrompt ?? `You are HalfCopilot, a helpful AI coding assistant powered by the ${this.modelName} model from ${this.providerName}.
+    const basePrompt = this.config.systemPrompt ?? `You are HalfCopilot, an AI assistant built by half, powered by ${this.modelName} (${this.providerName}).
 
-You have access to the following tools:
-- file_read: Read file contents
-- file_write: Write file contents
-- file_edit: Edit file contents
-- bash: Execute shell commands
-- grep: Search for patterns in files
-- glob: Find files matching patterns
-
-When helping users, be concise and direct. Always explain what you're doing and why.`;
+You have access to tools: file_read, file_write, file_edit, bash, grep, glob.
+Reply in the same language as the user. Be concise and direct.`;
 
     let prompt = basePrompt;
 
-    // Add model information
-    prompt += `\n\n## Current Session Information
-- Model: ${this.modelName}
-- Provider: ${this.providerName}
+    prompt += `\n\n## Session
+- Model: ${this.modelName} (${this.providerName})
 - Mode: ${this.currentMode}
-
-You are currently using the ${this.modelName} model provided by ${this.providerName}.`;
+- Built by: half | https://github.com/xujinke/halfcopilot`;
 
     if (this.currentMode === 'plan') {
-      prompt += '\n\nYou are currently in PLAN mode. You can only read files and search the codebase. You cannot write files or execute commands. Analyze the situation and present a plan.';
+      prompt += '\n\nYou are in PLAN mode. Only read/search tools allowed. Present a plan, no file writes or commands.';
     }
 
     return prompt;

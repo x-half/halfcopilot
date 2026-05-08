@@ -116,38 +116,19 @@ function printInfo(label: string, value: string) {
 }
 
 function printUserMessage(message: string) {
-  console.log('');
-  console.log(`  ${c.green}╭─────────────────────────────────────────────────╮${c.reset}`);
-  console.log(`  ${c.green}│${c.reset} ${c.green}${c.bold}👤 You${c.reset}                                          ${c.green}│${c.reset}`);
-  console.log(`  ${c.green}├─────────────────────────────────────────────────┤${c.reset}`);
-  
-  const lines = message.split('\n');
-  for (const line of lines) {
-    const padding = ' '.repeat(Math.max(0, 47 - line.length));
-    console.log(`  ${c.green}│${c.reset} ${line}${padding} ${c.green}│${c.reset}`);
-  }
-  
-  console.log(`  ${c.green}╰─────────────────────────────────────────────────╯${c.reset}`);
+  console.log(`\n  ${c.green}${c.bold}❯ ${c.reset}${message.substring(0, 100)}${message.length > 100 ? '...' : ''}\n`);
 }
 
 function printAssistantStart() {
-  console.log('');
-  console.log(`  ${c.blue}╭─────────────────────────────────────────────────╮${c.reset}`);
-  console.log(`  ${c.blue}│${c.reset} ${c.blue}${c.bold}🤖 HalfCopilot${c.reset}                                   ${c.blue}│${c.reset}`);
-  console.log(`  ${c.blue}├─────────────────────────────────────────────────┤${c.reset}`);
+  process.stdout.write(`\n  ${c.blue}${c.bold}🤖 ${c.reset}`);
 }
 
 function printAssistantEnd() {
-  console.log(`  ${c.blue}╰─────────────────────────────────────────────────╯${c.reset}`);
-  console.log('');
+  console.log('\n');
 }
 
 function printAssistantText(text: string) {
-  const lines = text.split('\n');
-  for (const line of lines) {
-    const padding = ' '.repeat(Math.max(0, 47 - line.length));
-    console.log(`  ${c.blue}│${c.reset} ${c.white}${line}${padding} ${c.blue}│${c.reset}`);
-  }
+  process.stdout.write(text);
 }
 
 function printThinking() {
@@ -158,8 +139,31 @@ function printThinking() {
   };
 }
 
+function checkConfig(config: any): boolean {
+  const providers = config?.providers;
+  if (!providers || Object.keys(providers).length === 0) {
+    console.log('');
+    console.log(`  ${c.yellow}${c.bold}⚙️  首次使用需要先配置模型 API Key${c.reset}`);
+    console.log('');
+    console.log(`  ${c.white}运行以下命令进行交互式配置:${c.reset}`);
+    console.log('');
+    console.log(`    ${c.green}${c.bold}halfcop setup${c.reset}`);
+    console.log('');
+    console.log(`  ${c.dim}或手动创建 ~/.halfcopilot/settings.json${c.reset}`);
+    console.log('');
+    return false;
+  }
+  return true;
+}
+
 function createAgent(options: AgentOptions = {}) {
   const config = loadConfig();
+  
+  // Check if any providers configured
+  if (!checkConfig(config)) {
+    process.exit(0);
+  }
+  
   const providerRegistry = new ProviderRegistry();
   providerRegistry.createFromConfig(config);
 
@@ -217,124 +221,75 @@ function createAgent(options: AgentOptions = {}) {
 async function runInteractive(options: AgentOptions = {}) {
   const { agent, providerName, config, skillRegistry, modelName, rl } = createAgent(options);
 
-  // Print beautiful header
   printHeader();
-  
   printInfo('Provider', providerName);
   printInfo('Model', modelName);
   printInfo('Mode', options.mode ?? 'auto');
   console.log('');
-  console.log(`  ${c.dim}Type your message and press Enter. Type "exit" to quit.${c.reset}`);
-  console.log(`  ${c.dim}Commands: /model <name> | /provider <name> | /clear | /help${c.reset}`);
+  console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
   console.log('');
 
-  const thinking = printThinking();
-  let isProcessing = false;
-  let thinkingInterval: NodeJS.Timeout | null = null;
-
-  const startThinking = () => {
-    isProcessing = true;
-    let i = 0;
-    thinkingInterval = setInterval(() => {
-      thinking.frame(i++);
-    }, 80);
+  let statusText = '';
+  const setStatus = (text: string) => {
+    statusText = text;
+    process.stdout.write(`\r\x1b[K  ${c.dim}${text}${c.reset}`);
   };
-
-  const stopThinking = () => {
-    isProcessing = false;
-    if (thinkingInterval) {
-      clearInterval(thinkingInterval);
-      thinkingInterval = null;
-    }
-    thinking.clear();
-  };
+  const clearStatus = () => process.stdout.write(`\r\x1b[K`);
 
   const ask = () => {
+    clearStatus();
     rl.question(`${c.green}${c.bold}  ❯ ${c.reset}`, async (input) => {
       const trimmed = input.trim();
       
-      // Handle commands
       if (trimmed.startsWith('/')) {
-        handleCommand(trimmed, options);
+        handleCommand(trimmed, options, modelName, providerName);
         ask();
         return;
       }
-      
       if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
-        console.log('');
-        console.log(`  ${c.yellow}Goodbye! 👋${c.reset}`);
-        console.log('');
-        rl.close();
-        return;
+        console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`); rl.close(); return;
       }
+      if (trimmed === '') { ask(); return; }
 
-      if (trimmed === '') {
-        ask();
-        return;
-      }
-
-      // Show user message
-      printUserMessage(trimmed);
-      console.log('');
-
-      // Start thinking animation
-      startThinking();
-      let isFirstChunk = true;
-      let hasOutput = false;
+      setStatus('⏳ Thinking...');
+      let started = false;
 
       try {
         for await (const event of agent.run(trimmed)) {
           switch (event.type) {
             case 'text':
-              if (isFirstChunk) {
-                stopThinking();
-                printAssistantStart();
-                isFirstChunk = false;
-              }
-              hasOutput = true;
-              // Don't print newlines before text
-              process.stdout.write(`  ${c.blue}│${c.reset} ${c.white}`);
+              if (!started) { console.log(''); started = true; }
+              process.stdout.write(`  ${c.blue}${c.bold}🤖${c.reset} `);
               process.stdout.write(event.content ?? '');
-              process.stdout.write(`${c.reset}`);
+              setStatus('Typing...');
               break;
-              
             case 'tool_use':
-              // Hide tool calls - just keep thinking
+              setStatus(`🔧 ${event.toolName}`);
               break;
-              
             case 'tool_result':
-              // Hide tool results
+              setStatus('Thinking...');
               break;
-              
             case 'error':
-              stopThinking();
-              if (!isFirstChunk) printAssistantEnd();
-              console.log(`  ${c.red}❌ Error: ${event.error?.message}${c.reset}`);
-              console.log('');
+              clearStatus();
+              console.log(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100)}${c.reset}`);
               break;
-              
             case 'done':
-              if (!isFirstChunk && hasOutput) {
-                // Print the closing line
-                const padding = ' '.repeat(47);
-                console.log(`  ${c.blue}│${c.reset}${padding} ${c.blue}│${c.reset}`);
-                printAssistantEnd();
-              } else if (isFirstChunk) {
-                stopThinking();
-              }
+              if (started) console.log('\n');
               break;
           }
         }
       } catch (err) {
-        stopThinking();
-        console.log(`  ${c.red}❌ Error: ${err instanceof Error ? err.message : err}${c.reset}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        clearStatus();
+        console.log(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}`);
       }
 
+      clearStatus();
       ask();
     });
   };
 
-  function handleCommand(cmd: string, opts: AgentOptions) {
+  function handleCommand(cmd: string, opts: AgentOptions, currentModel: string, currentProvider: string) {
     const parts = cmd.split(' ');
     const command = parts[0].toLowerCase();
     const arg = parts.slice(1).join(' ');
@@ -343,42 +298,29 @@ async function runInteractive(options: AgentOptions = {}) {
       case '/model':
         if (arg) {
           opts.model = arg;
-          console.log(`  ${c.green}✓ Model changed to: ${arg}${c.reset}`);
+          console.log(`  ${c.green}✓ Model: ${arg}${c.reset}`);
         } else {
-          console.log(`  ${c.yellow}Current model: ${modelName}${c.reset}`);
-          console.log(`  ${c.dim}Usage: /model <model-name>${c.reset}`);
+          console.log(`  ${c.yellow}Model: ${currentModel}${c.reset}`);
         }
         break;
-        
       case '/provider':
         if (arg) {
           opts.provider = arg;
-          console.log(`  ${c.green}✓ Provider changed to: ${arg}${c.reset}`);
+          console.log(`  ${c.green}✓ Provider: ${arg}${c.reset}`);
         } else {
-          console.log(`  ${c.yellow}Current provider: ${providerName}${c.reset}`);
-          console.log(`  ${c.dim}Usage: /provider <provider-name>${c.reset}`);
+          console.log(`  ${c.yellow}Provider: ${currentProvider}${c.reset}`);
         }
         break;
-        
       case '/clear':
         console.clear();
         printHeader();
         break;
-        
       case '/help':
-        console.log('');
-        console.log(`  ${c.cyan}Available Commands:${c.reset}`);
-        console.log(`  ${c.white}/model <name>${c.reset}     - Switch model`);
-        console.log(`  ${c.white}/provider <name>${c.reset} - Switch provider`);
-        console.log(`  ${c.white}/clear${c.reset}            - Clear screen`);
-        console.log(`  ${c.white}/help${c.reset}            - Show this help`);
-        console.log(`  ${c.white}/exit${c.reset}            - Exit the program`);
-        console.log('');
+        console.log(`\n  ${c.cyan}Commands:${c.reset}`);
+        console.log(`  ${c.white}/model <name> /provider <name> /clear /help /exit${c.reset}\n`);
         break;
-        
       default:
-        console.log(`  ${c.red}Unknown command: ${command}${c.reset}`);
-        console.log(`  ${c.dim}Type /help for available commands${c.reset}`);
+        console.log(`  ${c.red}Unknown: ${command}${c.reset}`);
     }
   }
 
@@ -416,22 +358,7 @@ async function runSingle(prompt: string, options: AgentOptions = {}) {
   rl.close();
 }
 
-// Default command
-program
-  .argument('[prompt]', 'Optional prompt to start with')
-  .option('-m, --model <model>', 'Model to use')
-  .option('-p, --provider <provider>', 'Provider to use')
-  .option('--mode <mode>', 'Agent mode (plan/review/act/auto)', 'auto')
-  .option('--hybrid', 'Enable hybrid mode')
-  .action(async (prompt, options) => {
-    if (prompt) {
-      await runSingle(prompt, options);
-    } else {
-      await runInteractive(options);
-    }
-  });
-
-// Subcommands
+// Subcommands first
 program
   .command('chat')
   .description('Start interactive chat mode')
@@ -649,5 +576,10 @@ program
     
     rl.close();
   });
+
+// Default action: when no command given, start interactive chat
+program.action(async () => {
+  await runInteractive({});
+});
 
 program.parse();
