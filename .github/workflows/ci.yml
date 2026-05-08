@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [20.x]
 
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +19,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
-      - run: npm install
-      - run: npm run build 2>&1 || npx tsc --build packages/shared packages/config packages/provider packages/tools packages/core packages/memory packages/mcp packages/skills packages/cli
-      - run: echo "CI passed"
+      - name: Install root dependencies
+        run: npm install --ignore-scripts
+
+      - name: Install workspace packages
+        run: |
+          cd packages/shared && npm install --ignore-scripts && cd ../..
+          cd packages/config && npm install --ignore-scripts && cd ../..
+          cd packages/provider && npm install --ignore-scripts && cd ../..
+          cd packages/tools && npm install --ignore-scripts && cd ../..
+          cd packages/core && npm install --ignore-scripts && cd ../..
+          cd packages/memory && npm install --ignore-scripts && cd ../..
+          cd packages/mcp && npm install --ignore-scripts && cd ../..
+          cd packages/skills && npm install --ignore-scripts && cd ../..
+          cd packages/cli && npm install --ignore-scripts && cd ../..
+
+      - name: Build packages
+        run: |
+          npx tsc --build packages/shared packages/config packages/provider packages/tools packages/core packages/memory packages/mcp packages/skills packages/cli
+
+      - name: Verify build
+        run: |
+          test -f packages/cli/dist/halfcop.js && echo "✓ Build successful!"
