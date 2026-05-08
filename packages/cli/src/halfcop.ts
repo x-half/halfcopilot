@@ -227,18 +227,20 @@ async function runInteractive(options: AgentOptions = {}) {
   printInfo('Mode', options.mode ?? 'auto');
   console.log('');
   console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
+
+  // Status line at the very bottom - rendered via ANSI
+  const showStatus = (text: string) => {
+    process.stdout.write(`\x1b[999B\r\x1b[K  ${c.dim}${text}${c.reset}`);
+  };
+  const hideStatus = () => {
+    process.stdout.write(`\x1b[999B\r\x1b[K`);
+  };
+
+  // Reserve bottom line for status
   console.log('');
 
-  let statusText = '';
-  const setStatus = (text: string) => {
-    statusText = text;
-    process.stdout.write(`\r\x1b[K  ${c.dim}${text}${c.reset}`);
-  };
-  const clearStatus = () => process.stdout.write(`\r\x1b[K`);
-
   const ask = () => {
-    clearStatus();
-    rl.question(`${c.green}${c.bold}  ❯ ${c.reset}`, async (input) => {
+    rl.question(`\n${c.green}${c.bold}  ❯ ${c.reset}`, async (input) => {
       const trimmed = input.trim();
       
       if (trimmed.startsWith('/')) {
@@ -251,43 +253,49 @@ async function runInteractive(options: AgentOptions = {}) {
       }
       if (trimmed === '') { ask(); return; }
 
-      setStatus('⏳ Thinking...');
+      showStatus('⏳ Thinking...');
       let started = false;
 
       try {
         for await (const event of agent.run(trimmed)) {
           switch (event.type) {
             case 'text':
-              if (!started) { console.log(''); started = true; }
-              process.stdout.write(`  ${c.blue}${c.bold}🤖${c.reset} `);
+              if (!started) {
+                hideStatus();
+                process.stdout.write(`\n  ${c.blue}${c.bold}🤖${c.reset} `);
+                started = true;
+              }
               process.stdout.write(event.content ?? '');
-              setStatus('Typing...');
               break;
             case 'tool_use':
-              setStatus(`🔧 ${event.toolName}`);
+              hideStatus();
+              process.stdout.write(`\n  ${c.dim}🔧 ${event.toolName}...${c.reset}`);
               break;
             case 'tool_result':
-              setStatus('Thinking...');
+              showStatus('⏳ Thinking...');
               break;
             case 'error':
-              clearStatus();
+              hideStatus();
               console.log(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100)}${c.reset}`);
               break;
             case 'done':
               if (started) console.log('\n');
+              hideStatus();
               break;
           }
         }
       } catch (err) {
+        hideStatus();
         const msg = err instanceof Error ? err.message : String(err);
-        clearStatus();
         console.log(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}`);
       }
 
-      clearStatus();
       ask();
     });
   };
+
+  ask();
+}
 
   function handleCommand(cmd: string, opts: AgentOptions, currentModel: string, currentProvider: string) {
     const parts = cmd.split(' ');
@@ -323,9 +331,6 @@ async function runInteractive(options: AgentOptions = {}) {
         console.log(`  ${c.red}Unknown: ${command}${c.reset}`);
     }
   }
-
-  ask();
-}
 
 async function runSingle(prompt: string, options: AgentOptions = {}) {
   const { agent, rl } = createAgent(options);
@@ -473,7 +478,9 @@ program
     const providers: Array<{
       name: string; label: string; baseUrl: string; models: string[]; desc: string;
     }> = [
-      { name: 'xiaomi', label: '小米 MiMo', desc: '[推荐] 已验证，直接可用',
+      { name: 'minimax', label: 'MiniMax', desc: 'MiniMax 2.7 — 已验证可用',
+        baseUrl: 'https://api.minimax.chat/v1', models: ['MiniMax-2.7'] },
+      { name: 'xiaomi', label: '小米 MiMo', desc: 'Token Plan API',
         baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'] },
       { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，国产大模型',
         baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-coder'] },
@@ -503,10 +510,10 @@ program
     console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
     console.log('');
     
-    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-5): ${c.reset}`);
+    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-6): ${c.reset}`);
     const idx = parseInt(choice.trim());
     
-    if (isNaN(idx) || idx < 0 || idx > 5) {
+    if (isNaN(idx) || idx < 0 || idx > 6) {
       console.log(`  ${c.red}无效选择${c.reset}`);
       rl.close();
       return;
