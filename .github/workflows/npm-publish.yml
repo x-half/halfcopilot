@@ -13,21 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
 
-      - run: pnpm install
-      - run: pnpm build
-
-      - name: Build npm package
-        run: node scripts/build-npm.mjs
+      - run: npm install
+      - run: npx tsc --build packages/shared packages/config packages/provider packages/tools packages/core packages/memory packages/mcp packages/skills packages/cli
+      - run: node scripts/build-npm.mjs
 
       - run: cd npm && npm publish --provenance --access public
         env:
