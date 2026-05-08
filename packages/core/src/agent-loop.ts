@@ -45,6 +45,7 @@ export class AgentLoop {
 
       let fullText = '';
       let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+      let toolResults: Array<{ id: string; output: string; isError: boolean }> = [];
 
       for await (const event of stream) {
         if (event.type === 'text') {
@@ -67,7 +68,7 @@ export class AgentLoop {
           if (this.currentMode === 'plan' && !PLAN_SAFE_TOOLS.includes(toolName)) {
             const msg = `Tool "${toolName}" not allowed in plan mode.`;
             yield { type: 'tool_result', toolName, toolOutput: msg };
-            this.conversation.addToolResult(event.id, msg, true);
+            toolResults.push({ id: event.id, output: msg, isError: true });
             continue;
           }
 
@@ -83,11 +84,11 @@ export class AgentLoop {
             });
 
             yield { type: 'tool_result', toolName, toolOutput: result.output };
-            this.conversation.addToolResult(event.id, result.output, !!result.error);
+            toolResults.push({ id: event.id, output: result.output, isError: !!result.error });
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
             yield { type: 'tool_result', toolName, toolOutput: errorMsg };
-            this.conversation.addToolResult(event.id, errorMsg, true);
+            toolResults.push({ id: event.id, output: errorMsg, isError: true });
           }
 
           this.currentState = AgentState.THINKING;
@@ -98,13 +99,18 @@ export class AgentLoop {
           this.conversation.addTokenUsage(event.usage);
 
           if (hasToolUse) {
-            // Build one assistant message with text + all tool_uses
+            // IMPORTANT: add assistant (with tool_calls) FIRST, then tool_results
             const blocks: any[] = [];
             if (fullText) blocks.push({ type: 'text', text: fullText });
             for (const tu of toolUses) {
               blocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
             }
             this.conversation.addAssistantMessage(blocks);
+
+            // Then add tool results after the assistant message
+            for (const tr of toolResults) {
+              this.conversation.addToolResult(tr.id, tr.output, tr.isError);
+            }
           } else if (fullText) {
             this.conversation.addAssistantMessage(fullText);
           }
