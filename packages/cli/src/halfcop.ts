@@ -478,8 +478,8 @@ program
     const providers: Array<{
       name: string; label: string; baseUrl: string; models: string[]; desc: string;
     }> = [
-      { name: 'minimax', label: 'MiniMax', desc: 'MiniMax 2.7 — 已验证可用',
-        baseUrl: 'https://api.minimax.chat/v1', models: ['MiniMax-2.7'] },
+      { name: 'minimax', label: 'MiniMax', desc: 'M2.7 / M2.5 — OpenAI 兼容',
+        baseUrl: 'https://api.minimaxi.com/v1', models: ['MiniMax-M2.7', 'MiniMax-M2.5'] },
       { name: 'xiaomi', label: '小米 MiMo', desc: 'Token Plan API',
         baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'] },
       { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，国产大模型',
