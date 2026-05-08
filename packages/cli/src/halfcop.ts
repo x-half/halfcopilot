@@ -521,4 +521,133 @@ program
     console.log('');
   });
 
+program
+  .command('setup')
+  .description('Interactive setup — configure API keys for model providers')
+  .action(async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    
+    const configDir = path.join(os.homedir(), '.halfcopilot');
+    const configFile = path.join(configDir, 'settings.json');
+    
+    // Load existing or create default
+    let config: any = {};
+    if (fs.existsSync(configFile)) {
+      config = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+    }
+    if (!config.providers) config.providers = {};
+    
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string) => new Promise<string>(resolve => rl.question(q, resolve));
+    
+    // Provider templates
+    const providers: Array<{
+      name: string; label: string; baseUrl: string; models: string[]; desc: string;
+    }> = [
+      { name: 'xiaomi', label: '小米 MiMo', desc: '[推荐] 已验证，直接可用',
+        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'] },
+      { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，国产大模型',
+        baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-coder'] },
+      { name: 'qwen', label: '通义千问 Qwen', desc: '阿里云出品',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-turbo', 'qwen-plus'] },
+      { name: 'openai', label: 'OpenAI', desc: 'GPT-4o / GPT-4o-mini',
+        baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini'] },
+      { name: 'anthropic', label: 'Anthropic Claude', desc: 'Claude Sonnet 4',
+        baseUrl: '', models: ['claude-sonnet-4-20250514'] },
+    ];
+    
+    console.log('');
+    console.log(`  ${c.cyan}${c.bold}⚙️  HalfCopilot Setup${c.reset}`);
+    console.log('');
+    console.log(`  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`);
+    console.log('');
+    
+    // Pick default provider first
+    console.log(`  ${c.cyan}${c.bold}📦 可用厂商:${c.reset}`);
+    console.log('');
+    
+    for (let i = 0; i < providers.length; i++) {
+      const p = providers[i];
+      const configured = config.providers[p.name] ? ` ${c.green}(已配置)${c.reset}` : '';
+      console.log(`  ${c.bold}${i + 1}${c.reset}. ${c.white}${p.label}${c.reset} — ${c.dim}${p.desc}${c.reset}${configured}`);
+    }
+    console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
+    console.log('');
+    
+    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-5): ${c.reset}`);
+    const idx = parseInt(choice.trim());
+    
+    if (isNaN(idx) || idx < 0 || idx > 5) {
+      console.log(`  ${c.red}无效选择${c.reset}`);
+      rl.close();
+      return;
+    }
+    
+    if (idx === 0) {
+      console.log(`  ${c.yellow}配置完成！${c.reset}`);
+      rl.close();
+      return;
+    }
+    
+    const selected = providers[idx - 1];
+    
+    console.log('');
+    console.log(`  ${c.cyan}配置 ${selected.label}${c.reset}`);
+    
+    let apiKey: string;
+    
+    if (selected.name === 'xiaomi') {
+      // Show quick config presets
+      console.log('');
+      console.log(`  ${c.dim}小米 Token Plan API Key 示例格式:${c.reset}`);
+      console.log(`  ${c.dim}tp-xxxxxxxxxx...${c.reset}`);
+    }
+    
+    apiKey = await ask(`  ${c.green}API Key: ${c.reset}`);
+    
+    if (!apiKey.trim()) {
+      console.log(`  ${c.yellow}已跳过${c.reset}`);
+      rl.close();
+      return;
+    }
+    
+    // Build models object
+    const models: Record<string, { contextWindow: number; maxOutput: number }> = {};
+    for (const m of selected.models) {
+      models[m] = { contextWindow: 128000, maxOutput: 8192 };
+    }
+    
+    // Save provider config
+    config.providers[selected.name] = {
+      type: selected.name === 'anthropic' ? 'anthropic' : 'openai-compatible',
+      ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
+      apiKey,
+      models,
+    };
+    
+    // Set as default if no default set
+    if (!config.defaultProvider) {
+      config.defaultProvider = selected.name;
+      config.defaultModel = selected.models[0];
+    }
+    
+    // Write config
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+    
+    console.log('');
+    console.log(`  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`);
+    console.log(`  ${c.dim}配置文件: ${configFile}${c.reset}`);
+    console.log(`  ${c.dim}模型: ${selected.models.join(', ')}${c.reset}`);
+    
+    if (config.defaultProvider === selected.name) {
+      console.log(`  ${c.green}已设为默认厂商${c.reset}`);
+    }
+    console.log('');
+    
+    rl.close();
+  });
+
 program.parse();

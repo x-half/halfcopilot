@@ -1,6 +1,6 @@
 {
   "name": "halfcopilot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HalfCopilot — Multi-model Agent Framework CLI with Beautiful Chat Interface",
   "type": "module",
   "bin": {
@@ -37,8 +37,15 @@
     "node": ">=20.0.0"
   },
   "keywords": [
-    "agent", "cli", "ai", "multi-model", "copilot",
-    "code-assistant", "deepseek", "openai", "anthropic"
+    "agent",
+    "cli",
+    "ai",
+    "multi-model",
+    "copilot",
+    "code-assistant",
+    "deepseek",
+    "openai",
+    "anthropic"
   ],
   "author": "HalfCopilot Team",
   "license": "MIT",
