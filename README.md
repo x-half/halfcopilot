@@ -1,70 +1,69 @@
 # HalfCopilot
 
-> Multi-model Agent Framework CLI with Beautiful Chat Interface
+> Multi-model Agent Framework CLI with Beautiful Terminal UI
 
 [![npm version](https://img.shields.io/npm/v/halfcopilot.svg)](https://www.npmjs.com/package/halfcopilot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
+[![CI](https://github.com/halfcopilot/halfcopilot/actions/workflows/ci.yml/badge.svg)](https://github.com/halfcopilot/halfcopilot/actions)
 
-## 📸 Preview
+## Preview
 
 ```
-  ╭─────────────────────────────────────────────────────╮
-  │                                                     │
-  │    ██╗  ██╗ █████╗ ██╗     ██████╗ ██████╗ ██████╗  │
-  │    ██║  ██║██╔══██╗██║    ██╔════╝██╔═══██╗██╔══██╗ │
-  │    ███████║███████║██║    ██║     ██║   ██║██████╔╝ │
-  │    ██╔══██║██╔══██║██║    ██║     ██║   ██║██╔═══╝  │
-  │    ██║  ██║██║  ██║██║    ╚██████╗╚██████╔╝██║      │
-  │    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═════╝ ╚═════╝ ╚═╝      │
-  │                                                     │
-  │         Multi-model Agent Framework CLI              │
-  │                                                     │
-  ╰─────────────────────────────────────────────────────╯
+  ╭──────────────────────────────────────────────────────────────╮
+  │                   H A L F   C O P I L O T                    │
+  │               Multi-model Agent Framework CLI                │
+  ╰──────────────────────────────────────────────────────────────╯
 
-  Provider: xiaomi
-  Model:    mimo-v2.5-pro
-  Mode:     auto
+  Provider: minimax
+  Model: MiniMax-M2.7
+  Mode: auto
 
-  ❯ 帮我写一个快速排序
+  ❯ 你是谁
 
-  ╭─────────────────────────────────────────────────╮
-  │ 👤 You                                          │
-  ├─────────────────────────────────────────────────┤
-  │ 帮我写一个快速排序                               │
-  ╰─────────────────────────────────────────────────╯
+  💭 用户问我是谁，我应该用中文回答。
 
-  ⠋ Thinking...
+  ● 我是 HalfCopilot，一个由 half 构建的 AI 助手。
 
-  ╭─────────────────────────────────────────────────╮
-  │ 🤖 HalfCopilot                                  │
-  ├─────────────────────────────────────────────────┤
-  │ 好的，这是快速排序的两种实现...                   │
-  ╰─────────────────────────────────────────────────╯
+  有什么我可以帮你的吗？
+  (523ms)
 ```
 
-## ✨ Features
+## Features
 
-- 🤖 **Multi-model Support** — DeepSeek · Xiaomi MiMo · Qwen · OpenAI · Anthropic
-- 🎨 **Beautiful TUI** — Chat-like interface with colors and animations  
-- 🔧 **Built-in Tools** — File operations, command execution, content search
-- 🎯 **Skills System** — Extensible skill triggers and execution
-- 🔒 **Permission Control** — Safe command execution control
-- 📦 **MCP Support** — Extensible tool ecosystem via MCP protocol
-- 🧠 **Memory System** — Persistent project and user context
+- 🤖 **Multi-model Support** — DeepSeek · MiniMax · Xiaomi MiMo · Qwen · OpenAI · Anthropic
+- 🎨 **Beautiful TUI** — Box-drawing chat UI with spinner animation, code block preview, status bar
+- 🔧 **Built-in Tools** — File read/write/edit, bash execution, grep, glob
+- 🎯 **Skills System** — git-commit, test-runner, code-review, documentation, refactor (all fully functional)
+- 🔒 **Permission Control** — Tiered permission levels (SAFE/WARN/UNSAFE), session-based approval with TTL
+- 📦 **MCP Protocol** — Extend tools via Model Context Protocol (stdio + SSE transport)
+- 🧠 **Memory System** — Persistent user/project context with file locking and auto-archive
+- 🧪 **130+ Tests** — Comprehensive test coverage across all 9 packages
 
-## 🚀 Quick Start
+## Quick Start
 
-### Install via npm
+### via npm
 
 ```bash
 npm install -g halfcopilot
 ```
 
-### Install via pnpm
+### via pnpm
 
 ```bash
 pnpm add -g halfcopilot
+```
+
+### via npx (no install)
+
+```bash
+npx halfcopilot
+```
+
+### One-line Install (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/halfcopilot/halfcopilot/main/install.ps1 | iex
 ```
 
 ### One-line Install (Linux/macOS)
@@ -73,48 +72,37 @@ pnpm add -g halfcopilot
 curl -fsSL https://raw.githubusercontent.com/halfcopilot/halfcopilot/main/install.sh | bash
 ```
 
-### One-line Install (Windows)
+## Usage
 
-```powershell
-irm https://raw.githubusercontent.com/halfcopilot/halfcopilot/main/install.ps1 | iex
-```
-
-### Or run directly (no install)
-
-```bash
-npx halfcopilot
-```
-
-## 📖 Usage
-
-### Start Interactive Chat
+### Interactive Chat
 
 ```bash
 halfcop
 ```
 
-### Run Single Command
+### Run Once
 
 ```bash
 halfcop run "explain this code"
 halfcop run "帮我写一个快速排序"
-halfcop run "请帮我读取 README.md 文件"
 ```
 
-### Use Different Models
+### Setup (first time)
 
 ```bash
-# Xiaomi MiMo (default)
-halfcop --provider xiaomi --model mimo-v2.5-pro
+halfcop setup
+```
 
-# DeepSeek
-halfcop --provider deepseek --model deepseek-chat
+### Doctor (check config)
 
-# OpenAI
-halfcop --provider openai --model gpt-4o
+```bash
+halfcop doctor
+```
 
-# Qwen
-halfcop --provider qwen --model qwen-plus
+### List Models
+
+```bash
+halfcop models
 ```
 
 ### Commands
@@ -123,32 +111,36 @@ halfcop --provider qwen --model qwen-plus
 |---------|-------------|
 | `halfcop` | Start interactive chat |
 | `halfcop chat` | Start interactive chat |
-| `halfcop run "prompt"` | Run single prompt |
-| `halfcop models` | List available models |
-| `halfcop doctor` | Check configuration |
+| `halfcop run <prompt>` | Run single prompt and exit |
+| `halfcop models` | List configured models |
+| `halfcop doctor` | Check configuration and environment |
 | `halfcop skills` | List available skills |
+| `halfcop setup` | Interactive API key configuration |
 
-### Interactive Commands
+### In-Chat Commands
 
 | Command | Description |
 |---------|-------------|
 | `/model <name>` | Switch model |
 | `/provider <name>` | Switch provider |
+| `/mode <plan/act/auto/review>` | Set agent mode |
 | `/clear` | Clear screen |
 | `/help` | Show help |
-| `exit` | Exit program |
+| `exit` / `quit` | Exit program |
 
-## ⚙️ Configuration
+## Configuration
 
-Create `~/.halfcopilot/settings.json`:
+Config file: `~/.halfcopilot/settings.json`
 
 ```json
 {
   "defaultProvider": "xiaomi",
   "defaultModel": "mimo-v2.5-pro",
+  "maxTurns": 50,
   "permissions": {
+    "autoApproveSafe": true,
     "allow": ["file_read", "file_write", "file_edit", "grep", "glob"],
-    "deny": ["rm -rf /", "sudo rm"]
+    "deny": ["bash(rm -rf *)", "bash(sudo *)"]
   },
   "providers": {
     "xiaomi": {
@@ -156,7 +148,7 @@ Create `~/.halfcopilot/settings.json`:
       "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
       "apiKey": "YOUR_API_KEY",
       "models": {
-        "mimo-v2.5-pro": { "contextWindow": 128000, "maxOutput": 8192 }
+        "mimo-v2.5-pro": { "contextWindow": 128000, "maxOutput": 16384 }
       }
     },
     "deepseek": {
@@ -171,79 +163,91 @@ Create `~/.halfcopilot/settings.json`:
 }
 ```
 
-## 📦 Supported Models
+## Supported Models
 
 | Provider | Models | API Key |
 |----------|--------|---------|
-| **Xiaomi** | mimo-v2.5-pro, mimo-v2.5 | [Get API Key](https://token-plan-cn.xiaomimimo.com) |
-| **DeepSeek** | deepseek-chat, deepseek-coder | [Get API Key](https://platform.deepseek.com) |
-| **Qwen** | qwen-turbo, qwen-plus | [Get API Key](https://dashscope.aliyuncs.com) |
-| **OpenAI** | gpt-4o, gpt-4o-mini | [Get API Key](https://platform.openai.com) |
-| **Anthropic** | claude-sonnet-4-20250514 | [Get API Key](https://console.anthropic.com) |
+| **MiniMax** | MiniMax-M2.7, MiniMax-M2.5 | [minimaxi.com](https://minimaxi.com) |
+| **Xiaomi MiMo** | mimo-v2.5-pro, mimo-v2.5 | [token-plan-cn.xiaomimimo.com](https://token-plan-cn.xiaomimimo.com) |
+| **DeepSeek** | deepseek-chat, deepseek-reasoner | [platform.deepseek.com](https://platform.deepseek.com) |
+| **Qwen** | qwen-turbo, qwen-plus | [dashscope.aliyuncs.com](https://dashscope.aliyuncs.com) |
+| **OpenAI** | gpt-4o, gpt-4o-mini | [platform.openai.com](https://platform.openai.com) |
+| **Anthropic** | claude-sonnet-4-20250514 | [console.anthropic.com](https://console.anthropic.com) |
 
-## 🛠️ Built-in Tools
+## Built-in Tools
 
 | Tool | Description | Permission |
 |------|-------------|------------|
-| `file_read` | Read file contents | Auto |
-| `file_write` | Write file contents | Auto |
-| `file_edit` | Edit file contents | Auto |
-| `bash` | Execute commands | Auto (safe) / Confirm (unsafe) |
-| `grep` | Search file contents | Auto |
-| `glob` | Find files by pattern | Auto |
+| `file_read` | Read file contents with offset/limit | SAFE |
+| `file_write` | Write/create file with parent dirs | WARN |
+| `file_edit` | Find-and-replace text in file | WARN |
+| `bash` | Execute shell command | UNSAFE (read-only auto-approved) |
+| `grep` | Search file contents via regex | SAFE |
+| `glob` | Find files by glob pattern | SAFE |
 
-## 🎯 Skills
+## Skills
 
 | Skill | Description |
 |-------|-------------|
-| `git-commit` | Create meaningful git commits |
-| `test-runner` | Run project tests |
-| `code-review` | Review code for issues |
-| `documentation` | Generate documentation |
-| `refactor` | Refactor code quality |
+| `git-commit` | Analyze changes, generate conventional commit message, stage and commit |
+| `test-runner` | Detect framework (npm/pytest/go/cargo/make), run tests, parse results |
+| `code-review` | Check file length, eval usage, hardcoded secrets, `any` types, empty catches |
+| `documentation` | Parse exports, functions, classes, interfaces; generate Markdown docs |
+| `refactor` | Analyze code, remove console.log, verify with type checker |
 
-## 🔧 Development
+## Development
 
 ```bash
 git clone https://github.com/halfcopilot/halfcopilot.git
 cd halfcopilot
 pnpm install
 pnpm build
-pnpm test
+pnpm test        # 130 tests in 15 test files
+pnpm lint
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
-
-## 📁 Project Structure
+### Project Structure
 
 ```
 halfcopilot/
 ├── packages/
-│   ├── cli/       # CLI entry point + TUI
-│   ├── core/      # Agent core engine
-│   ├── provider/  # Model providers
-│   ├── tools/     # Tool system
-│   ├── mcp/       # MCP protocol
-│   ├── memory/    # Memory system
-│   ├── config/    # Configuration
-│   ├── skills/    # Skills system
-│   └── shared/    # Shared utilities
-├── docs/          # Documentation
-├── scripts/       # Build scripts
-├── npm/           # npm package
-├── install.sh     # Linux/macOS installer
-├── install.ps1    # Windows installer
-└── .github/       # CI/CD workflows
+│   ├── shared/      # Base utilities, errors, logger (zero deps)
+│   ├── config/      # Zod schema, config loader with env overrides
+│   ├── provider/    # OpenAI-compatible + Anthropic providers
+│   ├── tools/       # Tool registry, executor, permission checker
+│   ├── core/        # Agent loop, conversation manager, hybrid mode
+│   ├── memory/      # Persistent memory with file locking
+│   ├── mcp/         # MCP protocol (stdio + SSE transport)
+│   ├── skills/      # Skill registry with trigger matching
+│   └── cli/         # CLI + TUI (React/Ink + enhanced terminal UI)
+├── docs/            # Documentation
+├── scripts/         # Build scripts
+├── .github/         # CI/CD workflows
+├── install.ps1      # Windows PowerShell installer
+└── install.sh       # Linux/macOS shell installer
 ```
 
-## 📄 License
+## Architecture
+
+```
+                cli (halfcopilot)
+               /  |   |   |    \
+              /   |   |   |     \
+        config  provider  tools  memory
+           \       |     /        |
+            \      |    /         |
+             shared <--/----------/
+                |
+                v
+              core
+              /   \
+             mcp  skills
+```
+
+## License
 
 MIT © HalfCopilot Team
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## ⭐ Show Your Support
-
-Give us a ⭐ on GitHub if this project helps you!
+See [CONTRIBUTING.md](CONTRIBUTING.md).
