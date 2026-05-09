@@ -1,4 +1,4 @@
-export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+export type MemoryType = "user" | "feedback" | "project" | "reference";
 
 export interface MemoryEntry {
   type: MemoryType;

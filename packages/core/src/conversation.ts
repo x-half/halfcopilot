@@ -1,36 +1,85 @@
-import type { Message, TokenUsage } from '@halfcopilot/provider';
+import type { Message, TokenUsage, ContentBlock } from "@halfcopilot/provider";
 
 export interface ConversationConfig {
   maxMessages: number;
+  maxTokens?: number;
   compactionThreshold?: number;
 }
 
 export class ConversationManager {
   private messages: Message[] = [];
   private totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
-  private config: ConversationConfig;
+  private config: Required<ConversationConfig>;
+  private systemPrompt?: string;
 
   constructor(config: ConversationConfig) {
-    this.config = config;
+    this.config = {
+      maxMessages: config.maxMessages,
+      maxTokens: config.maxTokens ?? 128000,
+      compactionThreshold: config.compactionThreshold ?? 50,
+    };
+  }
+
+  private estimateTokens(text: string): number {
+    let tokens = 0;
+    for (const char of text) {
+      if (/[\u4e00-\u9fff]/.test(char)) {
+        tokens += 1;
+      } else if (/\s/.test(char)) {
+        tokens += 0.25;
+      } else {
+        tokens += 0.25;
+      }
+    }
+    return Math.ceil(tokens);
+  }
+
+  getTokenCount(): number {
+    let total = 0;
+    for (const msg of this.messages) {
+      if (typeof msg.content === "string") {
+        total += this.estimateTokens(msg.content);
+      } else {
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            total += this.estimateTokens(block.text);
+          } else if (block.type === "tool_use") {
+            total += this.estimateTokens(block.name);
+            total += this.estimateTokens(JSON.stringify(block.input));
+          } else if (block.type === "thinking") {
+            total += this.estimateTokens(block.text);
+          }
+        }
+      }
+    }
+    return total;
+  }
+
+  getSystemPrompt(): string | undefined {
+    return this.systemPrompt;
+  }
+
+  setSystemPrompt(prompt: string): void {
+    this.systemPrompt = prompt;
   }
 
   addUserMessage(content: string): void {
-    this.messages.push({ role: 'user', content });
+    this.messages.push({ role: "user", content });
     this.enforceLimit();
   }
 
-  addAssistantMessage(content: string | Message[]): void {
-    if (typeof content === 'string') {
-      this.messages.push({ role: 'assistant', content });
+  addAssistantMessage(content: string | ContentBlock[]): void {
+    if (typeof content === "string") {
+      this.messages.push({ role: "assistant", content });
     } else {
-      this.messages.push({ role: 'assistant', content: content as any });
+      this.messages.push({ role: "assistant", content });
     }
     this.enforceLimit();
   }
 
   addToolResult(toolUseId: string, output: string, isError = false): void {
     this.messages.push({
-      role: 'tool_result',
+      role: "tool_result",
       toolUseId,
       content: output,
       isError,
@@ -44,8 +93,9 @@ export class ConversationManager {
 
   buildMessages(systemPrompt?: string): Message[] {
     const msgs: Message[] = [];
-    if (systemPrompt) {
-      msgs.push({ role: 'system', content: systemPrompt });
+    const sp = systemPrompt ?? this.systemPrompt;
+    if (sp) {
+      msgs.push({ role: "system", content: sp });
     }
     msgs.push(...this.messages);
     return msgs;
@@ -68,10 +118,90 @@ export class ConversationManager {
     this.messages = [];
   }
 
+  compact(): void {
+    for (let i = 0; i < this.messages.length; i++) {
+      const msg = this.messages[i];
+      if (
+        msg.role === "tool_result" &&
+        typeof msg.content === "string" &&
+        msg.content.length > 1000
+      ) {
+        this.messages[i] = {
+          ...msg,
+          content: msg.content.substring(0, 1000) + "\n...[truncated]",
+        };
+      }
+    }
+
+    const targetTokens = Math.floor(this.config.maxTokens * 0.9);
+    while (
+      (this.getTokenCount() > targetTokens ||
+        this.messages.length > this.config.maxMessages) &&
+      this.messages.length > 1
+    ) {
+      const idx = this.findMessageToDrop();
+      if (idx === -1) break;
+      this.messages.splice(idx, 1);
+    }
+  }
+
+  private findMessageToDrop(): number {
+    const len = this.messages.length;
+    if (len <= 1) return -1;
+
+    const totalTools = this.messages.filter(
+      (m) => m.role === "tool_result",
+    ).length;
+
+    let toolSeen = 0;
+    for (let i = 0; i < len; i++) {
+      if (this.messages[i].role === "tool_result") {
+        toolSeen++;
+        if (toolSeen <= totalTools - 3) {
+          return i;
+        }
+      }
+    }
+
+    for (let i = 0; i < len - 2; i++) {
+      const msg = this.messages[i];
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        if (msg.content.some((b) => b.type === "tool_use")) {
+          return i;
+        }
+      }
+    }
+
+    for (let i = 1; i < len - 1; i++) {
+      const msg = this.messages[i];
+      if (
+        msg.role === "user" ||
+        (msg.role === "assistant" && typeof msg.content === "string")
+      ) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
   private enforceLimit(): void {
+    if (
+      this.config.compactionThreshold > 0 &&
+      this.messages.length >= this.config.compactionThreshold
+    ) {
+      this.compact();
+      return;
+    }
+
+    if (this.getTokenCount() > this.config.maxTokens) {
+      this.compact();
+      return;
+    }
+
     while (this.messages.length > this.config.maxMessages) {
       const idx = this.messages.findIndex(
-        (m) => m.role === 'user' || m.role === 'assistant'
+        (m) => m.role === "user" || m.role === "assistant",
       );
       if (idx >= 0) {
         this.messages.splice(idx, 1);

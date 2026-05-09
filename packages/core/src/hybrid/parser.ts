@@ -1,4 +1,10 @@
-export type TextBlockType = 'read' | 'edit' | 'create' | 'run' | 'search' | 'glob';
+export type TextBlockType =
+  | "read"
+  | "edit"
+  | "create"
+  | "run"
+  | "search"
+  | "glob";
 
 export interface TextBlock {
   type: TextBlockType;
@@ -18,7 +24,7 @@ export interface TextPart {
 export interface ParseError {
   message: string;
   line: number;
-  severity: 'error' | 'warning';
+  severity: "error" | "warning";
 }
 
 export interface ParseResult {
@@ -40,7 +46,7 @@ export class TextBlockParser {
     const textParts: TextPart[] = [];
     const errors: ParseError[] = [];
 
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     let i = 0;
 
     while (i < lines.length) {
@@ -48,7 +54,7 @@ export class TextBlockParser {
       const inlineRun = this.INLINE_RUN.exec(lines[i]);
       if (inlineRun) {
         blocks.push({
-          type: 'run',
+          type: "run",
           params: { command: inlineRun[1].trim() },
           source: { line: i + 1, column: 1 },
         });
@@ -59,7 +65,7 @@ export class TextBlockParser {
       const inlineRead = this.INLINE_READ.exec(lines[i]);
       if (inlineRead) {
         blocks.push({
-          type: 'read',
+          type: "read",
           params: { path: inlineRead[1].trim() },
           source: { line: i + 1, column: 1 },
         });
@@ -84,7 +90,7 @@ export class TextBlockParser {
         }
 
         // Extract body
-        let body = '';
+        let body = "";
         const bodyLines: string[] = [];
         while (i < lines.length && !this.BLOCK_END.test(lines[i])) {
           bodyLines.push(lines[i]);
@@ -92,18 +98,18 @@ export class TextBlockParser {
         }
 
         if (i < lines.length) {
-          body = bodyLines.join('\n');
+          body = bodyLines.join("\n");
           i++; // Skip closing ```
         } else {
           errors.push({
             message: `Unclosed text block starting at line ${startLine + 1}`,
             line: startLine + 1,
-            severity: 'warning',
+            severity: "warning",
           });
         }
 
         // Handle EDIT type special body
-        if (blockType === 'edit') {
+        if (blockType === "edit") {
           const parsed = this.parseEditBody(body);
           params._oldContent = parsed.oldContent;
           params._newContent = parsed.newContent;
@@ -124,9 +130,12 @@ export class TextBlockParser {
     return { blocks, textParts, errors };
   }
 
-  private parseEditBody(body: string): { oldContent: string; newContent: string } {
+  private parseEditBody(body: string): {
+    oldContent: string;
+    newContent: string;
+  } {
     const separator = this.EDIT_SEPARATOR;
-    const lines = body.split('\n');
+    const lines = body.split("\n");
     const oldLines: string[] = [];
     const newLines: string[] = [];
     let foundSeparator = false;
@@ -145,16 +154,20 @@ export class TextBlockParser {
 
     if (!foundSeparator) {
       // No separator, treat entire body as new content (create file semantics)
-      return { oldContent: '', newContent: body };
+      return { oldContent: "", newContent: body };
     }
 
     return {
-      oldContent: oldLines.join('\n'),
-      newContent: newLines.join('\n'),
+      oldContent: oldLines.join("\n"),
+      newContent: newLines.join("\n"),
     };
   }
 
   hasTextBlocks(text: string): boolean {
-    return this.BLOCK_START.test(text) || this.INLINE_RUN.test(text) || this.INLINE_READ.test(text);
+    return (
+      this.BLOCK_START.test(text) ||
+      this.INLINE_RUN.test(text) ||
+      this.INLINE_READ.test(text)
+    );
   }
 }

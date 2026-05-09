@@ -1,20 +1,40 @@
-import type { Provider, ChatEvent, ToolDef, TokenUsage } from '@halfcopilot/provider';
-import type { ToolRegistry, ToolExecutor, PermissionChecker } from '@halfcopilot/tools';
+import type {
+  Provider,
+  ChatEvent,
+  ToolDef,
+  TokenUsage,
+} from "@halfcopilot/provider";
+import type {
+  ToolRegistry,
+  ToolExecutor,
+  PermissionChecker,
+} from "@halfcopilot/tools";
 
-export type AgentMode = 'plan' | 'review' | 'act' | 'auto';
+export type AgentMode = "plan" | "review" | "act" | "auto";
 
 export enum AgentState {
-  IDLE = 'idle',
-  THINKING = 'thinking',
-  TOOL_CALLING = 'tool_calling',
-  TOOL_APPROVAL = 'tool_approval',
-  COMPACTING = 'compacting',
-  ERROR = 'error',
-  PAUSED = 'paused',
+  IDLE = "idle",
+  THINKING = "thinking",
+  TOOL_CALLING = "tool_calling",
+  TOOL_APPROVAL = "tool_approval",
+  COMPACTING = "compacting",
+  TIMEOUT = "timeout",
+  ERROR = "error",
+  PAUSED = "paused",
 }
 
 export interface AgentEvent {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'done' | 'error' | 'mode_change' | 'state_change' | 'approval_required';
+  type:
+    | "text"
+    | "tool_use"
+    | "tool_result"
+    | "thinking"
+    | "done"
+    | "error"
+    | "mode_change"
+    | "state_change"
+    | "approval_required"
+    | "warning";
   content?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
@@ -35,5 +55,8 @@ export interface AgentConfig {
   maxTurns: number;
   mode?: AgentMode;
   systemPrompt?: string;
-  onApprovalNeeded?: (toolName: string, input: Record<string, unknown>) => Promise<boolean>;
+  onApprovalNeeded?: (
+    toolName: string,
+    input: Record<string, unknown>,
+  ) => Promise<boolean>;
 }

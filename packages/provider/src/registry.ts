@@ -1,8 +1,8 @@
-import type { Provider } from './base.js';
-import { OpenAICompatibleProvider } from './openai.js';
-import { AnthropicProvider } from './anthropic.js';
-import type { HalfCopilotConfig } from '@halfcopilot/config';
-import { ProviderError } from '@halfcopilot/shared';
+import type { Provider } from "./base.js";
+import { OpenAICompatibleProvider } from "./openai.js";
+import { AnthropicProvider } from "./anthropic.js";
+import type { HalfCopilotConfig } from "@halfcopilot/config";
+import { ProviderError } from "@halfcopilot/shared";
 
 export class ProviderRegistry {
   private providers = new Map<string, Provider>();
@@ -14,7 +14,10 @@ export class ProviderRegistry {
   get(name: string): Provider {
     const provider = this.providers.get(name);
     if (!provider) {
-      throw new ProviderError(name, `Provider "${name}" not found. Available: ${this.list().join(', ')}`);
+      throw new ProviderError(
+        name,
+        `Provider "${name}" not found. Available: ${this.list().join(", ")}`,
+      );
     }
     return provider;
   }
@@ -31,22 +34,25 @@ export class ProviderRegistry {
     if (!config.providers) return;
     for (const [name, providerConfig] of Object.entries(config.providers)) {
       if (this.providers.has(name)) continue;
-      
+
       try {
-        if (providerConfig.type === 'openai-compatible') {
+        if (providerConfig.type === "openai-compatible") {
           // Check if API key is set
-          if (providerConfig.apiKey.startsWith('env:')) {
+          if (providerConfig.apiKey.startsWith("env:")) {
             const envKey = providerConfig.apiKey.slice(4);
             if (!process.env[envKey]) {
               // Skip this provider if env var not set
               continue;
             }
           }
-          const provider = OpenAICompatibleProvider.fromConfig(name, providerConfig);
+          const provider = OpenAICompatibleProvider.fromConfig(
+            name,
+            providerConfig,
+          );
           this.register(name, provider);
-        } else if (providerConfig.type === 'anthropic') {
+        } else if (providerConfig.type === "anthropic") {
           // Check if API key is set
-          if (providerConfig.apiKey.startsWith('env:')) {
+          if (providerConfig.apiKey.startsWith("env:")) {
             const envKey = providerConfig.apiKey.slice(4);
             if (!process.env[envKey]) {
               // Skip this provider if env var not set

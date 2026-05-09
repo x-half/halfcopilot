@@ -1,6 +1,6 @@
-import type { ToolDef } from '@halfcopilot/provider';
-import type { Tool, PermissionLevel } from './types.js';
-import { ToolError } from '@halfcopilot/shared';
+import type { ToolDef } from "@halfcopilot/provider";
+import type { Tool, PermissionLevel } from "./types.js";
+import { ToolError } from "@halfcopilot/shared";
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
@@ -26,11 +26,13 @@ export class ToolRegistry {
   }
 
   definitions(): ToolDef[] {
-    return Array.from(this.tools.values()).map(({ name, description, inputSchema }) => ({
-      name,
-      description,
-      inputSchema,
-    }));
+    return Array.from(this.tools.values()).map(
+      ({ name, description, inputSchema }) => ({
+        name,
+        description,
+        inputSchema,
+      }),
+    );
   }
 
   list(): string[] {
@@ -38,6 +40,8 @@ export class ToolRegistry {
   }
 
   getByPermission(level: PermissionLevel): Tool[] {
-    return Array.from(this.tools.values()).filter(t => t.permissionLevel === level);
+    return Array.from(this.tools.values()).filter(
+      (t) => t.permissionLevel === level,
+    );
   }
 }

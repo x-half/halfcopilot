@@ -1,6 +1,6 @@
 export function truncate(str: string, maxLen: number): string {
   if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 3) + '...';
+  return str.slice(0, maxLen - 3) + "...";
 }
 
 export function formatDuration(ms: number): string {
@@ -10,7 +10,7 @@ export function formatDuration(ms: number): string {
 }
 
 export function resolveEnvVar(value: string): string {
-  if (value.startsWith('env:')) {
+  if (value.startsWith("env:")) {
     const envKey = value.slice(4);
     const envVal = process.env[envKey];
     if (!envVal) {

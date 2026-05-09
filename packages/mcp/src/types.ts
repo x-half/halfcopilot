@@ -1,9 +1,10 @@
 export interface MCPTransportConfig {
-  type: 'stdio' | 'sse';
+  type: "stdio" | "sse";
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   url?: string;
+  timeout?: number;
 }
 
 export interface MCPServerConfig {
@@ -12,14 +13,14 @@ export interface MCPServerConfig {
 }
 
 export interface JSONRPCRequest {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id: number | string;
   method: string;
   params?: Record<string, unknown>;
 }
 
 export interface JSONRPCResponse {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id: number | string;
   result?: unknown;
   error?: {
@@ -30,12 +31,15 @@ export interface JSONRPCResponse {
 }
 
 export interface JSONRPCNotification {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   method: string;
   params?: Record<string, unknown>;
 }
 
-export type JSONRPCMessage = JSONRPCRequest | JSONRPCResponse | JSONRPCNotification;
+export type JSONRPCMessage =
+  | JSONRPCRequest
+  | JSONRPCResponse
+  | JSONRPCNotification;
 
 export interface MCPToolDefinition {
   name: string;
@@ -50,7 +54,7 @@ export interface MCPToolCall {
 
 export interface MCPToolResult {
   content: Array<{
-    type: 'text' | 'image' | 'resource';
+    type: "text" | "image" | "resource";
     text?: string;
     data?: string;
     mimeType?: string;

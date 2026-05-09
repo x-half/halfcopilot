@@ -1,4 +1,4 @@
-import type { ChatParams, ChatEvent, ProviderCapabilities } from './types.js';
+import type { ChatParams, ChatEvent, ProviderCapabilities } from "./types.js";
 
 export interface Provider {
   readonly name: string;

@@ -1,6 +1,11 @@
-import type { Provider, ChatParams, ChatEvent, ProviderCapabilities } from '@halfcopilot/provider';
-import { TextBlockParser } from './parser.js';
-import { TextBlockToToolCallMapper } from './mapper.js';
+import type {
+  Provider,
+  ChatParams,
+  ChatEvent,
+  ProviderCapabilities,
+} from "@halfcopilot/provider";
+import { TextBlockParser } from "./parser.js";
+import { TextBlockToToolCallMapper } from "./mapper.js";
 
 export class HybridProvider implements Provider {
   readonly name: string;
@@ -29,9 +34,9 @@ export class HybridProvider implements Provider {
     const enhancedParams = this.injectTextBlockProtocol(params);
 
     // Call underlying provider
-    let fullText = '';
+    let fullText = "";
     for await (const event of this.inner.chat(enhancedParams)) {
-      if (event.type === 'text') {
+      if (event.type === "text") {
         fullText += event.content;
         yield event; // Still pass through text stream to TUI
       } else {
@@ -45,14 +50,14 @@ export class HybridProvider implements Provider {
       try {
         const toolCall = this.mapper.map(block);
         yield {
-          type: 'tool_use',
+          type: "tool_use",
           id: toolCall.id,
           name: toolCall.name,
           input: toolCall.input,
         };
       } catch (error) {
         yield {
-          type: 'error',
+          type: "error",
           error: error instanceof Error ? error : new Error(String(error)),
         };
       }
@@ -110,7 +115,7 @@ Use these blocks when you need to read files, edit code, create files, run comma
     return {
       ...params,
       messages: [
-        { role: 'system', content: protocolPrompt },
+        { role: "system", content: protocolPrompt },
         ...params.messages,
       ],
     };

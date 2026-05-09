@@ -14,14 +14,14 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@halfcopilot/shared": "file:../shared",
     "@halfcopilot/config": "file:../config",
-    "@halfcopilot/provider": "file:../provider",
-    "@halfcopilot/tools": "file:../tools",
     "@halfcopilot/core": "file:../core",
-    "@halfcopilot/memory": "file:../memory",
     "@halfcopilot/mcp": "file:../mcp",
+    "@halfcopilot/memory": "file:../memory",
+    "@halfcopilot/provider": "file:../provider",
+    "@halfcopilot/shared": "file:../shared",
     "@halfcopilot/skills": "file:../skills",
+    "@halfcopilot/tools": "file:../tools",
     "commander": "^12.0.0",
     "ink": "^4.4.0",
     "react": "^18.3.0"
@@ -31,7 +31,13 @@
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
   },
-  "keywords": ["agent", "cli", "ai", "multi-model", "copilot"],
+  "keywords": [
+    "agent",
+    "cli",
+    "ai",
+    "multi-model",
+    "copilot"
+  ],
   "author": "HalfCopilot Team",
   "license": "MIT"
 }

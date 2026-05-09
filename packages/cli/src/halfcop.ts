@@ -4,20 +4,34 @@
  * HalfCopilot CLI - Beautiful Chat Interface
  */
 
-import { Command } from 'commander';
-import { loadConfig } from '@halfcopilot/config';
-import { ProviderRegistry } from '@halfcopilot/provider';
-import { ToolRegistry, createBuiltinTools, PermissionChecker, ToolExecutor } from '@halfcopilot/tools';
-import { AgentLoop, HybridProvider } from '@halfcopilot/core';
-import { SkillRegistry, createBuiltinSkills } from '@halfcopilot/skills';
-import readline from 'readline';
+// Suppress noisy Node.js deprecation warnings (e.g. punycode from deps)
+try { process.noDeprecation = true; } catch {}
+process.removeAllListeners("warning");
+process.on("warning", (w) => {
+  if (w.name === "DeprecationWarning" && String(w.message).includes("punycode")) return;
+  // biome-ignore lint/suspicious/noConsole: intentional
+  console.error(w.stack ?? w.message);
+});
+
+import { Command } from "commander";
+import { loadConfig, type HalfCopilotConfig } from "@halfcopilot/config";
+import { ProviderRegistry } from "@halfcopilot/provider";
+import {
+  ToolRegistry,
+  createBuiltinTools,
+  PermissionChecker,
+  ToolExecutor,
+} from "@halfcopilot/tools";
+import { AgentLoop, HybridProvider, type AgentMode } from "@halfcopilot/core";
+import { SkillRegistry, createBuiltinSkills } from "@halfcopilot/skills";
+import readline from "readline";
 
 const program = new Command();
 
 program
-  .name('halfcop')
-  .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.29');
+  .name("halfcop")
+  .description("HalfCopilot — Multi-model Agent Framework CLI")
+  .version("1.0.29");
 
 interface AgentOptions {
   model?: string;
@@ -28,63 +42,62 @@ interface AgentOptions {
 
 // Beautiful color palette
 const c = {
-  reset: '[0m',
-  bold: '[1m',
-  dim: '[2m',
-  
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  italic: "\x1b[3m",
+
   // Colors
-  cyan: '[36m',
-  green: '[32m',
-  yellow: '[33m',
-  red: '[31m',
-  magenta: '[35m',
-  blue: '[34m',
-  white: '[37m',
-  gray: '[90m',
-  
+  black: "\x1b[30m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  white: "\x1b[37m",
+  gray: "\x1b[90m",
+
   // Background
-  bgCyan: '[46m',
-  bgGreen: '[42m',
-  bgYellow: '[43m',
-  bgBlue: '[44m',
+  bgCyan: "\x1b[46m",
+  bgGreen: "\x1b[42m",
+  bgYellow: "\x1b[43m",
+  bgBlue: "\x1b[44m",
 };
 
 // Box drawing characters
 const box = {
-  tl: '╭',
-  tr: '╮',
-  bl: '╰',
-  br: '╯',
-  h: '─',
-  v: '│',
-  ml: '├',
-  mr: '┤',
+  tl: "╭",
+  tr: "╮",
+  bl: "╰",
+  br: "╯",
+  h: "─",
+  v: "│",
+  ml: "├",
+  mr: "┤",
 };
 
 // Agent status types
-type AgentStatus = 'idle' | 'thinking' | 'executing' | 'completed' | 'error';
+type AgentStatus = "idle" | "thinking" | "executing" | "completed" | "error";
 
 function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Bouncing bar animation (like opencode style)
+// Braille dot spinning animation (Claude Code style)
 function createThinkingAnimation() {
   let interval: NodeJS.Timeout | null = null;
-  let pos = 0;
-  let dir = 1;
-  const width = 8;
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  let i = 0;
 
-  const start = () => {
-    const render = () => {
-      const left = ' '.repeat(Math.max(0, pos));
-      const right = ' '.repeat(Math.max(0, width - pos - 1));
-      process.stdout.write(`\r ${c.cyan}${c.dim}┃${c.reset}${left}${c.cyan}${c.bold}█${c.reset}${right}${c.cyan}${c.dim}┃${c.reset} ${c.dim}thinking...${c.reset}`);
-      pos += dir;
-      if (pos >= width - 1 || pos <= 0) dir *= -1;
-    };
-    render();
-    interval = setInterval(render, 60);
+  const start = (message = "Thinking") => {
+    if (interval) return;
+    interval = setInterval(() => {
+      process.stdout.write(
+        `\r  ${c.cyan}${frames[i % frames.length]}${c.reset} ${c.dim}${message}${c.reset}   `,
+      );
+      i++;
+    }, 80);
   };
 
   const stop = () => {
@@ -92,7 +105,7 @@ function createThinkingAnimation() {
       clearInterval(interval);
       interval = null;
     }
-    process.stdout.write('\r' + ' '.repeat(30) + '\r');
+    process.stdout.write("\r" + " ".repeat(50) + "\r");
   };
 
   return { start, stop };
@@ -100,93 +113,138 @@ function createThinkingAnimation() {
 
 // Animated loading indicator
 async function showLoading(message: string, duration: number = 1500) {
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   const startTime = Date.now();
   let i = 0;
-  
+
   process.stdout.write(`\r${c.cyan}${frames[0]} ${message}${c.reset}`);
-  
+
   while (Date.now() - startTime < duration) {
     await sleep(80);
     i = (i + 1) % frames.length;
     process.stdout.write(`\r${c.cyan}${frames[i]} ${message}${c.reset}`);
   }
-  
-  process.stdout.write('\r' + ' '.repeat(message.length + 4) + '\r');
+
+  process.stdout.write("\r" + " ".repeat(message.length + 4) + "\r");
 }
 
 function printBox(content: string, color: string = c.cyan, width: number = 50) {
-  const lines = content.split('\n');
-  const maxLen = Math.max(...lines.map(l => l.length), width - 4);
-  
-  console.log(`${color}${box.tl}${box.h.repeat(maxLen + 2)}${box.tr}${c.reset}`);
+  const lines = content.split("\n");
+  const maxLen = Math.max(...lines.map((l) => l.length), width - 4);
+
+  console.log(
+    `${color}${box.tl}${box.h.repeat(maxLen + 2)}${box.tr}${c.reset}`,
+  );
   for (const line of lines) {
-    const padding = ' '.repeat(maxLen - line.length);
-    console.log(`${color}${box.v}${c.reset} ${line}${padding} ${color}${box.v}${c.reset}`);
+    const padding = " ".repeat(maxLen - line.length);
+    console.log(
+      `${color}${box.v}${c.reset} ${line}${padding} ${color}${box.v}${c.reset}`,
+    );
   }
-  console.log(`${color}${box.bl}${box.h.repeat(maxLen + 2)}${box.br}${c.reset}`);
+  console.log(
+    `${color}${box.bl}${box.h.repeat(maxLen + 2)}${box.br}${c.reset}`,
+  );
 }
 
 // Simple banner - no ASCII art that breaks across terminals
 function printHeader() {
-  console.log('');
-  console.log(`  ${c.cyan}${c.bold}╭${'─'.repeat(62)}╮${c.reset}`);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
+  console.log("");
+  console.log(`  ${c.cyan}${c.bold}╭${"─".repeat(62)}╮${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}│${" ".repeat(62)}│${c.reset}`);
   // Banner: H A L F C O P I L O T (19 chars), centered in 62-char box
-  const banner = 'H A L F   C O P I L O T';
+  const banner = "H A L F   C O P I L O T";
   const bannerPad = Math.floor((62 - banner.length) / 2);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(bannerPad)}${c.white}${c.bold}${banner}${c.reset}${c.cyan}${' '.repeat(62 - bannerPad - banner.length)}│${c.reset}`);
+  console.log(
+    `  ${c.cyan}${c.bold}│${" ".repeat(bannerPad)}${c.white}${c.bold}${banner}${c.reset}${c.cyan}${" ".repeat(62 - bannerPad - banner.length)}│${c.reset}`,
+  );
   // Subtitle: 32 chars, pad 15 each side
-  const subtitle = 'Multi-model Agent Framework CLI';
+  const subtitle = "Multi-model Agent Framework CLI";
   const subPad = Math.floor((62 - subtitle.length) / 2);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(subPad)}${c.white}${subtitle}${c.reset}${c.cyan}${' '.repeat(62 - subPad - subtitle.length)}│${c.reset}`);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
-  console.log(`  ${c.cyan}${c.bold}╰${'─'.repeat(62)}╯${c.reset}`);
-  console.log('');
+  console.log(
+    `  ${c.cyan}${c.bold}│${" ".repeat(subPad)}${c.white}${subtitle}${c.reset}${c.cyan}${" ".repeat(62 - subPad - subtitle.length)}│${c.reset}`,
+  );
+  console.log(`  ${c.cyan}${c.bold}│${" ".repeat(62)}│${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}╰${"─".repeat(62)}╯${c.reset}`);
+  console.log("");
 }
 
 function printInfo(label: string, value: string) {
-  console.log(`  ${c.gray}${label}:${c.reset} ${c.white}${c.bold}${value}${c.reset}`);
+  console.log(
+    `  ${c.gray}${label}:${c.reset} ${c.white}${c.bold}${value}${c.reset}`,
+  );
 }
 
 function printUserMessage(message: string) {
   const maxLen = Math.min(message.length, 60);
-  const display = message.substring(0, maxLen) + (message.length > maxLen ? '...' : '');
+  const display =
+    message.substring(0, maxLen) + (message.length > maxLen ? "..." : "");
   const lineLen = display.length + 4;
-  
-  console.log(`\n  ${c.green}${box.tl}─── You ${box.h.repeat(Math.max(0, lineLen - 12))}${box.tr}${c.reset}`);
-  console.log(`  ${c.green}${box.v}${c.reset} ${c.green}${c.bold}${display}${c.reset}${' '.repeat(Math.max(0, 60 - display.length))} ${c.green}${box.v}${c.reset}`);
-  console.log(`  ${c.green}${box.bl}───${box.h.repeat(Math.max(0, lineLen - 1))}${box.br}${c.reset}\n`);
+
+  console.log(
+    `\n  ${c.green}${box.tl}─── You ${box.h.repeat(Math.max(0, lineLen - 12))}${box.tr}${c.reset}`,
+  );
+  console.log(
+    `  ${c.green}${box.v}${c.reset} ${c.green}${c.bold}${display}${c.reset}${" ".repeat(Math.max(0, 60 - display.length))} ${c.green}${box.v}${c.reset}`,
+  );
+  console.log(
+    `  ${c.green}${box.bl}───${box.h.repeat(Math.max(0, lineLen - 1))}${box.br}${c.reset}\n`,
+  );
 }
 
 // Strip basic markdown syntax for clean terminal display
 function stripMarkdown(text: string): string {
   return text
-    .replace(/\*\*([^*]+)\*\*/g, '$1')     // **bold** -> text
-    .replace(/\*([^*]+)\*/g, '$1')           // *italic* -> text
-    .replace(/`([^`]+)`/g, '$1')               // `code` -> text
-    .replace(/^#+\s+(.*)$/gm, '$1')           // # headings -> plain
-    .replace(/^>\s+(.*)$/gm, '  ▸ $1')        // > blockquote
-    .replace(/^-\s+/gm, '  • ')               // - list items
-    .replace(/\*\*([^*]+)\*\*/g, '$1');    // already handled above, but double-check
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // **bold** -> text
+    .replace(/\*([^*]+)\*/g, "$1") // *italic* -> text
+    .replace(/`([^`]+)`/g, "$1") // `code` -> text
+    .replace(/^#+\s+(.*)$/gm, "$1") // # headings -> plain
+    .replace(/^>\s+(.*)$/gm, "  ▸ $1") // > blockquote
+    .replace(/^-\s+/gm, "  • ") // - list items
+    .replace(/\*\*([^*]+)\*\*/g, "$1"); // already handled above, but double-check
+}
+
+// Print text with code block detection
+function printFormatted(text: string) {
+  const parts = text.split(/(```[\s\S]*?```)/);
+  for (const part of parts) {
+    if (part.startsWith("```")) {
+      const code = part.replace(/```\w*\n?/, "").replace(/```$/, "");
+      const lines = code.split("\n");
+      for (const line of lines) {
+        process.stdout.write(`  ${c.gray}│ ${line}${c.reset}\n`);
+      }
+    } else {
+      process.stdout.write(part);
+    }
+  }
 }
 
 function printMarkdownBox(text: string) {
   // Strip markdown first
   const clean = stripMarkdown(text);
-  const displayLines = clean.split('\n').filter(l => l.trim() !== '');
+  const displayLines = clean.split("\n").filter((l) => l.trim() !== "");
   if (displayLines.length === 0) return;
 
-  const maxLen = Math.min(Math.max(...displayLines.map(l => l.length)), 64);
+  const maxLen = Math.min(Math.max(...displayLines.map((l) => l.length)), 64);
   const top = `  ${c.blue}${box.tl}─── HalfCopilot ${box.h.repeat(Math.max(0, maxLen - 21))}${box.tr}${c.reset}`;
 
-  console.log('\n' + top);
+  console.log("\n" + top);
   for (const line of displayLines) {
-    const padding = ' '.repeat(Math.max(0, maxLen - line.length));
-    console.log(`  ${c.blue}${box.v}${c.reset} ${c.white}${line}${c.reset}${padding} ${c.blue}${box.v}${c.reset}`);
+    const padding = " ".repeat(Math.max(0, maxLen - line.length));
+    console.log(
+      `  ${c.blue}${box.v}${c.reset} ${c.white}${line}${c.reset}${padding} ${c.blue}${box.v}${c.reset}`,
+    );
   }
   const bot = `  ${c.blue}${box.bl}───${box.h.repeat(maxLen)}${box.br}${c.reset}`;
-  console.log(bot + '\n');
+  console.log(bot + "\n");
+}
+
+function displayThinkingBox(text: string): void {
+  const lines = text.split("\n").filter(Boolean);
+  if (!lines.length) return;
+  for (const line of lines) {
+    process.stdout.write(`  ${c.dim}${c.italic}💭 ${line}${c.reset}\n`);
+  }
 }
 
 function printAssistantStart() {
@@ -194,39 +252,48 @@ function printAssistantStart() {
 }
 
 function printAssistantEnd() {
-  console.log('\n');
+  console.log("\n");
 }
 
 function printAssistantText(text: string) {
-  process.stdout.write(text);
+  printFormatted(text);
 }
 
 function printThinking() {
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   let i = 0;
   let interval: NodeJS.Timeout | null = null;
-  
+
   const start = () => {
     interval = setInterval(() => {
-      process.stdout.write(`\r  ${c.cyan}${frames[i % frames.length]} ${c.dim}Thinking...${c.reset}   `);
+      process.stdout.write(
+        `\r  ${c.cyan}${frames[i % frames.length]} ${c.dim}Thinking...${c.reset}   `,
+      );
       i++;
     }, 80);
   };
-  
+
   const stop = () => {
     if (interval) clearInterval(interval);
-    process.stdout.write('\r' + ' '.repeat(30) + '\r');
+    process.stdout.write("\r" + " ".repeat(30) + "\r");
   };
-  
+
   return { start, stop };
 }
 
-// Status bar rendering
-let currentStatus: AgentStatus = 'idle';
-let currentProvider = '';
-let currentModel = '';
-let currentMode = 'auto';
-let statusDescription = 'Ready';
+// Status tracking variables
+let currentStatus: AgentStatus = "idle";
+let currentProvider = "";
+let currentModel = "";
+let currentMode = "auto";
+let statusDescription = "Ready";
+let sessionStartTime = 0;
+let currentTurn = 0;
+let maxTurns = 20;
+let inputTokens = 0;
+let outputTokens = 0;
+let lastResponseTime = 0;
+let responseStartTime = 0;
 
 const statusColors: Record<AgentStatus, string> = {
   idle: c.gray,
@@ -237,77 +304,131 @@ const statusColors: Record<AgentStatus, string> = {
 };
 
 const statusEmoji: Record<AgentStatus, string> = {
-  idle: '⚪',
-  thinking: '🟡',
-  executing: '🔵',
-  completed: '🟢',
-  error: '🔴',
+  idle: "⚪",
+  thinking: "🟡",
+  executing: "🔵",
+  completed: "🟢",
+  error: "🔴",
 };
 
-// Status bar: simple single-line footer printed after header
-function printStatusBar() {
-  const left = `${c.gray}${currentProvider}/${currentModel}`;
-  const center = `${c.cyan}[${currentMode.toUpperCase()}]`;
-  const right = `${statusColors[currentStatus]}${statusEmoji[currentStatus]} ${statusDescription}`;
-  const leftPad = '  ';
-  const rightPad = '  ';
-  console.log(`${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}`);
+const PERMISSION_INDICATORS: Record<string, string> = {
+  SAFE: "🟢",
+  WARN: "🟡",
+  UNSAFE: "🔴",
+};
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${m}m${s}s`;
 }
 
-// updateStatus tracks state; printStatusBar() called at key moments only
+function getTerminalWidth(): number {
+  return process.stdout.columns || 80;
+}
+
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "…";
+}
+
+// Enhanced status bar with rich session info
+function printStatusBar() {
+  const cols = getTerminalWidth();
+  const elapsed =
+    sessionStartTime > 0 ? formatDuration(Date.now() - sessionStartTime) : "";
+  const tokens =
+    inputTokens + outputTokens > 0 ? `${inputTokens}↓${outputTokens}↑` : "";
+  const turnInfo = currentTurn > 0 ? `${currentTurn}/${maxTurns}` : "";
+
+  const leftParts: string[] = [];
+  if (currentProvider)
+    leftParts.push(`${c.gray}${currentProvider}/${currentModel}${c.reset}`);
+  if (turnInfo) leftParts.push(`${c.dim}${turnInfo}${c.reset}`);
+  const left = leftParts.join(" ");
+
+  const centerParts: string[] = [];
+  if (currentMode)
+    centerParts.push(`${c.cyan}[${currentMode.toUpperCase()}]${c.reset}`);
+  if (tokens) centerParts.push(`${c.green}${tokens}${c.reset}`);
+  if (elapsed) centerParts.push(`${c.dim}${elapsed}${c.reset}`);
+  const center = centerParts.join(" ");
+
+  const right = `${statusColors[currentStatus]}${statusEmoji[currentStatus]} ${truncate(statusDescription, 30)}${c.reset}`;
+
+  const paddedLeft = `  ${left}`;
+  const paddedRight = `${right}  `;
+  const remaining = Math.max(1, cols - paddedLeft.length - paddedRight.length);
+  const centerPadded = center.slice(0, remaining);
+
+  console.log(
+    `${paddedLeft}${" ".repeat(Math.max(1, remaining - centerPadded.length))}${centerPadded}${paddedRight}`,
+  );
+}
+
 function updateStatus(status: AgentStatus, desc?: string) {
   currentStatus = status;
   if (desc) statusDescription = desc;
+  if (currentStatus === "completed" && !desc) {
+    statusDescription = "Ready";
+  }
 }
 
-function checkConfig(config: any): boolean {
+function checkConfig(config: HalfCopilotConfig): boolean {
   const providers = config?.providers;
   if (!providers || Object.keys(providers).length === 0) {
-    console.log('');
-    console.log(`  ${c.yellow}${c.bold}⚙️  首次使用需要先配置模型 API Key${c.reset}`);
-    console.log('');
+    console.log("");
+    console.log(
+      `  ${c.yellow}${c.bold}⚙️  首次使用需要先配置模型 API Key${c.reset}`,
+    );
+    console.log("");
     console.log(`  ${c.white}运行以下命令进行交互式配置:${c.reset}`);
-    console.log('');
+    console.log("");
     console.log(`    ${c.green}${c.bold}halfcop setup${c.reset}`);
-    console.log('');
+    console.log("");
     console.log(`  ${c.dim}或手动创建 ~/.halfcopilot/settings.json${c.reset}`);
-    console.log('');
+    console.log("");
     return false;
   }
   return true;
 }
 
 // Keypress-based tool approval (no readline question)
-async function askApproval(toolName: string, _input: Record<string, unknown>): Promise<boolean> {
+async function askApproval(
+  toolName: string,
+  _input: Record<string, unknown>,
+): Promise<boolean> {
   return new Promise((resolve) => {
     process.stdout.write(`  ${c.yellow}Allow ${toolName}? (y/n): ${c.reset}`);
     const handler = (_str: string | undefined, key: readline.Key) => {
-      if (key.name === 'y') {
-        process.stdin.removeListener('keypress', handler);
-        process.stdout.write('y\n');
+      if (key.name === "y") {
+        process.stdin.removeListener("keypress", handler);
+        process.stdout.write("y\n");
         resolve(true);
-      } else if (key.name === 'n') {
-        process.stdin.removeListener('keypress', handler);
-        process.stdout.write('n\n');
+      } else if (key.name === "n") {
+        process.stdin.removeListener("keypress", handler);
+        process.stdout.write("n\n");
         resolve(false);
       }
     };
-    process.stdin.on('keypress', handler);
+    process.stdin.on("keypress", handler);
   });
 }
 
 function createAgent(options: AgentOptions = {}) {
   const config = loadConfig();
-  
+
   // Check if any providers configured
   if (!checkConfig(config)) {
     process.exit(0);
   }
-  
+
   const providerRegistry = new ProviderRegistry();
   providerRegistry.createFromConfig(config);
 
-  const providerName = options.provider ?? config.defaultProvider ?? 'xiaomi';
+  const providerName = options.provider ?? config.defaultProvider ?? "xiaomi";
   let provider = providerRegistry.get(providerName);
 
   if (options.hybrid) {
@@ -316,11 +437,11 @@ function createAgent(options: AgentOptions = {}) {
 
   const toolRegistry = new ToolRegistry();
   const builtinTools = createBuiltinTools();
-  builtinTools.forEach(t => toolRegistry.register(t));
+  builtinTools.forEach((t) => toolRegistry.register(t));
 
   const skillRegistry = new SkillRegistry();
   const builtinSkills = createBuiltinSkills();
-  builtinSkills.forEach(s => skillRegistry.register(s));
+  builtinSkills.forEach((s) => skillRegistry.register(s));
 
   const permissions = new PermissionChecker({
     autoApproveSafe: config.permissions.autoApproveSafe,
@@ -330,7 +451,7 @@ function createAgent(options: AgentOptions = {}) {
 
   const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
 
-  const modelName = options.model ?? config.defaultModel ?? 'mimo-v2.5-pro';
+  const modelName = options.model ?? config.defaultModel ?? "mimo-v2.5-pro";
 
   const agent = new AgentLoop({
     provider,
@@ -340,39 +461,54 @@ function createAgent(options: AgentOptions = {}) {
     executor,
     permissions,
     maxTurns: config.maxTurns,
-    mode: (options.mode as any) ?? 'auto',
+    mode: (options.mode as AgentMode) ?? "auto",
   });
 
-  return { agent, providerName, config, skillRegistry, modelName, providerRegistry };
+  return {
+    agent,
+    providerName,
+    config,
+    skillRegistry,
+    modelName,
+    providerRegistry,
+  };
 }
 
 async function runInteractive(options: AgentOptions = {}) {
-  const { agent, providerName, config, skillRegistry, modelName, providerRegistry } = createAgent(options);
+  const {
+    agent,
+    providerName,
+    config,
+    skillRegistry,
+    modelName,
+    providerRegistry,
+  } = createAgent(options);
 
   currentProvider = providerName;
   currentModel = modelName;
-  currentMode = options.mode ?? 'auto';
+  currentMode = options.mode ?? "auto";
+  maxTurns = config.maxTurns ?? 20;
+  currentTurn = 0;
+  inputTokens = 0;
+  outputTokens = 0;
+  sessionStartTime = Date.now();
 
   printHeader();
-  printInfo('Provider', providerName);
-  printInfo('Model', modelName);
-  printInfo('Mode', options.mode ?? 'auto');
-  console.log('');
-  console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
-  console.log('');
+  printInfo("Provider", providerName);
+  printInfo("Model", modelName);
+  printInfo("Mode", options.mode ?? "auto");
+  printInfo("Max Turns", String(maxTurns));
+  console.log("");
+  console.log(
+    `  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`,
+  );
+  console.log("");
 
   const agentRef: { current: AgentLoop } = { current: agent };
 
   let isProcessing = false;
 
-  // ------- raw mode 一次性设置（永不切换）-------
-
-  readline.emitKeypressEvents(process.stdin);
-  if (process.stdin.isTTY) process.stdin.setRawMode(true);
-  process.stdin.resume();
-
-  // ------- 标准 readline 输入 -------
-
+  // Setup readline for input (readline manages raw mode internally)
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -385,16 +521,30 @@ async function runInteractive(options: AgentOptions = {}) {
       if (isProcessing) return;
       const trimmed = input.trim();
 
-      if (!trimmed) { ask(); return; }
+      if (!trimmed) {
+        ask();
+        return;
+      }
 
-      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+      if (
+        trimmed.toLowerCase() === "exit" ||
+        trimmed.toLowerCase() === "quit"
+      ) {
         console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`);
         rl.close();
         return;
       }
 
-      if (trimmed.startsWith('/')) {
-        const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config);
+      if (trimmed.startsWith("/")) {
+        const result = await handleCommand(
+          trimmed,
+          options,
+          modelName,
+          providerName,
+          agentRef,
+          providerRegistry,
+          config,
+        );
         if (result?.newModel) currentModel = result.newModel;
         if (result?.newProvider) currentProvider = result.newProvider;
         ask();
@@ -411,14 +561,16 @@ async function runInteractive(options: AgentOptions = {}) {
   const processInput = async (input: string) => {
     isProcessing = true;
     const trimmed = input.trim();
-    if (!trimmed) { isProcessing = false; return; }
+    if (!trimmed) {
+      isProcessing = false;
+      return;
+    }
 
-    // ESC 中断：用 keypress 事件（不碰 raw mode）
     let interrupted = false;
     const onKeypress = (_str: string | undefined, key: readline.Key) => {
-      if (key.name === 'escape') interrupted = true;
+      if (key.name === "escape") interrupted = true;
     };
-    process.stdin.on('keypress', onKeypress);
+    process.stdin.on("keypress", onKeypress);
 
     const thinking = createThinkingAnimation();
     thinking.start();
@@ -427,6 +579,7 @@ async function runInteractive(options: AgentOptions = {}) {
     let thinkingDisplayed = false;
     let loopEnded = false;
     let atLineStart = false;
+    let tBuffer = "";
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
@@ -435,63 +588,179 @@ async function runInteractive(options: AgentOptions = {}) {
           thinking.stop();
           process.stdout.write(`\n    ${c.yellow}⏹ Interrupted${c.reset}\n`);
           atLineStart = true;
+          updateStatus("idle", "Interrupted");
           break;
         }
 
         switch (event.type) {
-          case 'thinking':
+          case "thinking":
             if (!responseStarted) {
               if (!thinkingDisplayed) {
                 thinking.stop();
                 thinkingDisplayed = true;
               }
-              const content = event.content ?? '';
-              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
-              process.stdout.write(`    ${c.gray}${indented}${c.reset}`);
+              let content = event.content ?? "";
+              content = content.replace(/<\/?think>/gi, "").trim();
+              if (content) displayThinkingBox(content);
             }
             break;
-          case 'text':
+          case "text": {
+            const chunk = event.content ?? "";
             if (!responseStarted) {
               thinking.stop();
-              if (thinkingDisplayed) process.stdout.write('\n');
-              process.stdout.write(`\n    ${c.green}${c.bold}●${c.reset} `);
+            }
+            const combined = tBuffer + chunk;
+            const openIdx = combined.indexOf("<think>");
+            const closeIdx = combined.indexOf("</think>");
+            const hasComplete =
+              openIdx >= 0 && closeIdx >= 0 && closeIdx > openIdx + 6;
+            if (!responseStarted && hasComplete) {
+              const thinkText = combined.slice(openIdx + 7, closeIdx).trim();
+              if (thinkText) displayThinkingBox(thinkText);
+              const after = combined.slice(closeIdx + 8).trimStart();
+              if (after) {
+                process.stdout.write(
+                  `\n  ${c.green}${c.bold}●${c.reset} `,
+                );
+                responseStarted = true;
+                atLineStart = false;
+                responseStartTime = Date.now();
+                const clean = after.replace(/^\n+/, "");
+                if (clean) {
+                  const indented = clean.includes("\n")
+                    ? clean.replace(/\n/g, "\n  ")
+                    : clean;
+                  process.stdout.write(indented);
+                  atLineStart = clean.endsWith("\n");
+                }
+              }
+              tBuffer = "";
+              break;
+            }
+            if (!responseStarted && openIdx >= 0) {
+              tBuffer = combined;
+              break;
+            }
+            if (!responseStarted) {
+              process.stdout.write(
+                `\n  ${c.green}${c.bold}●${c.reset} `,
+              );
               responseStarted = true;
               atLineStart = false;
-            } else if (atLineStart) {
-              process.stdout.write(`    `);
-              atLineStart = false;
-            }
-            const tContent = event.content ?? '';
-            if (tContent.includes('\n')) {
-              const indented = tContent.replace(/\n/g, '\n    ');
+              responseStartTime = Date.now();
+              const clean = combined.replace(/^\n+/, "");
+              const indented = clean.includes("\n")
+                ? clean.replace(/\n/g, "\n  ")
+                : clean;
               process.stdout.write(indented);
-              atLineStart = tContent.endsWith('\n');
+              tBuffer = "";
+              break;
+            }
+            if (tBuffer) {
+              tBuffer = combined;
+              if (closeIdx >= 0 && openIdx >= 0 && closeIdx > openIdx + 6) {
+                const thinkText = tBuffer.slice(openIdx + 7, closeIdx).trim();
+                if (thinkText) displayThinkingBox(thinkText);
+                process.stdout.write(
+                  `\n  ${c.green}${c.bold}●${c.reset} `,
+                );
+                responseStarted = true;
+                atLineStart = false;
+                responseStartTime = Date.now();
+                const after = tBuffer.slice(closeIdx + 8).trimStart();
+                if (after) {
+                  const clean = after.replace(/^\n+/, "");
+                  if (clean) {
+                    const indented = clean.includes("\n")
+                      ? clean.replace(/\n/g, "\n  ")
+                      : clean;
+                    process.stdout.write(indented);
+                    atLineStart = clean.endsWith("\n");
+                  }
+                }
+                tBuffer = "";
+                break;
+              }
+              break;
+            }
+            if (atLineStart) {
+              process.stdout.write(`  `);
+              atLineStart = false;
+            }
+            if (chunk.includes("\n")) {
+              const indented = chunk.replace(/\n/g, "\n  ");
+              process.stdout.write(indented);
+              atLineStart = chunk.endsWith("\n");
             } else {
-              process.stdout.write(tContent);
+              process.stdout.write(chunk);
               atLineStart = false;
             }
             break;
-          case 'tool_use':
+          }
+          case "tool_use":
             if (!responseStarted) {
               thinking.stop();
               responseStarted = true;
             }
-            process.stdout.write(`\n    ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
+            const toolInput = event.toolInput ?? {};
+            const inputStr = JSON.stringify(toolInput);
+            process.stdout.write(
+              `\n    ${c.cyan}🔧 ${event.toolName}${c.reset} ${c.yellow}${PERMISSION_INDICATORS.WARN}${c.reset} `,
+            );
+            if (inputStr.length < 60) {
+              process.stdout.write(`${c.dim}${inputStr}${c.reset}`);
+            } else {
+              const formatted = JSON.stringify(toolInput, null, 2);
+              process.stdout.write(
+                `\n${formatted
+                  .split("\n")
+                  .map((l: string) => `      ${c.dim}${l}${c.reset}`)
+                  .join("\n")}`,
+              );
+            }
+            updateStatus("executing", event.toolName);
             break;
-          case 'tool_result':
-            process.stdout.write(` ${c.gray}✓${c.reset}\n`);
+          case "tool_result":
+            const output = event.toolOutput;
+            const success = output !== undefined && output !== null;
+            if (success) {
+              process.stdout.write(` ${c.green}✓${c.reset}\n`);
+            } else {
+              const errSummary = (
+                typeof output === "string" ? output : String(output ?? "")
+              ).slice(0, 100);
+              process.stdout.write(
+                ` ${c.red}✗${c.reset} ${c.dim}${errSummary}${c.reset}\n`,
+              );
+            }
             atLineStart = true;
+            updateStatus("executing", "Tool completed");
             break;
-          case 'error':
+          case "error":
             loopEnded = true;
             thinking.stop();
-            process.stdout.write(`\n    ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
+            process.stdout.write(
+              `\n    ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? "error"}${c.reset}\n`,
+            );
             atLineStart = true;
+            updateStatus("error", event.error?.message?.slice(0, 50));
             break;
-          case 'done':
+          case "done":
             loopEnded = true;
-            if (responseStarted) process.stdout.write('\n\n');
+            if (responseStarted) {
+              const respTime =
+                responseStartTime > 0 ? Date.now() - responseStartTime : 0;
+              lastResponseTime = respTime;
+              process.stdout.write(
+                `\n  ${c.dim}(${formatDuration(respTime)})${c.reset}\n\n`,
+              );
+            }
             atLineStart = true;
+            updateStatus("completed", "Ready");
+            if (event.usage) {
+              inputTokens += event.usage.inputTokens ?? 0;
+              outputTokens += event.usage.outputTokens ?? 0;
+            }
             break;
         }
       }
@@ -500,14 +769,28 @@ async function runInteractive(options: AgentOptions = {}) {
     } catch (err) {
       thinking.stop();
       const msg = err instanceof Error ? err.message : String(err);
-      process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
+      process.stdout.write(
+        `\n    ${c.red}✗ ${msg.replace(/^400 /, "").replace(/^429 /, "Quota exhausted — ").slice(0, 120)}${c.reset}\n`,
+      );
+      updateStatus("error", msg.slice(0, 50));
     } finally {
-      process.stdin.removeListener('keypress', onKeypress);
+      process.stdin.removeListener("keypress", onKeypress);
       isProcessing = false;
+      currentTurn++;
     }
   };
 
-  ask();
+  // Keep process alive, cleanup terminal on exit
+  await new Promise<void>((resolve) => {
+    rl.on("close", () => {
+      try {
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      } catch {}
+      process.stdin.pause();
+      resolve();
+    });
+    ask();
+  });
 }
 
 interface HandleCommandResult {
@@ -516,31 +799,32 @@ interface HandleCommandResult {
 }
 
 async function handleCommand(
-  cmd: string, 
-  opts: AgentOptions, 
-  currentModel: string, 
+  cmd: string,
+  opts: AgentOptions,
+  currentModel: string,
   currentProvider: string,
   agentRef: { current: AgentLoop },
   providerRegistry: ProviderRegistry,
-  config: any
+  config: HalfCopilotConfig,
 ): Promise<HandleCommandResult | void> {
-  const parts = cmd.split(' ');
+  const parts = cmd.split(" ");
   const command = parts[0].toLowerCase();
-  const arg = parts.slice(1).join(' ');
+  const arg = parts.slice(1).join(" ");
 
   switch (command) {
-    case '/model':
+    case "/model":
       if (arg) {
         opts.model = arg;
-        updateStatus('thinking', `Switching to ${arg}...`);
+        updateStatus("thinking", `Switching to ${arg}...`);
         try {
           // Re-create agent with new model
-          const providerName = opts.provider ?? config.defaultProvider ?? 'xiaomi';
+          const providerName =
+            opts.provider ?? config.defaultProvider ?? "xiaomi";
           const provider = providerRegistry.get(providerName);
-          
+
           const toolRegistry = new ToolRegistry();
           const builtinTools = createBuiltinTools();
-          builtinTools.forEach(t => toolRegistry.register(t));
+          builtinTools.forEach((t) => toolRegistry.register(t));
 
           const permissions = new PermissionChecker({
             autoApproveSafe: config.permissions.autoApproveSafe,
@@ -548,7 +832,11 @@ async function handleCommand(
             deny: config.permissions.deny,
           });
 
-          const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
+          const executor = new ToolExecutor(
+            toolRegistry,
+            permissions,
+            askApproval,
+          );
 
           const newAgent = new AgentLoop({
             provider,
@@ -558,9 +846,9 @@ async function handleCommand(
             executor,
             permissions,
             maxTurns: config.maxTurns,
-            mode: (opts.mode as any) ?? 'auto',
+            mode: (opts.mode as AgentMode) ?? "auto",
           });
-          
+
           agentRef.current = newAgent;
           console.log(`  ${c.green}✓ Model: ${arg}${c.reset}`);
           return { newModel: arg };
@@ -571,17 +859,17 @@ async function handleCommand(
         console.log(`  ${c.yellow}Model: ${currentModel}${c.reset}`);
       }
       break;
-      
-    case '/provider':
+
+    case "/provider":
       if (arg) {
         opts.provider = arg;
-        updateStatus('thinking', `Switching to ${arg}...`);
+        updateStatus("thinking", `Switching to ${arg}...`);
         try {
           const newProvider = providerRegistry.get(arg);
-          
+
           const toolRegistry = new ToolRegistry();
           const builtinTools = createBuiltinTools();
-          builtinTools.forEach(t => toolRegistry.register(t));
+          builtinTools.forEach((t) => toolRegistry.register(t));
 
           const permissions = new PermissionChecker({
             autoApproveSafe: config.permissions.autoApproveSafe,
@@ -589,19 +877,23 @@ async function handleCommand(
             deny: config.permissions.deny,
           });
 
-          const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
+          const executor = new ToolExecutor(
+            toolRegistry,
+            permissions,
+            askApproval,
+          );
 
           const newAgent = new AgentLoop({
             provider: newProvider,
             providerName: arg,
-            model: opts.model ?? config.defaultModel ?? 'mimo-v2.5-pro',
+            model: opts.model ?? config.defaultModel ?? "mimo-v2.5-pro",
             tools: toolRegistry,
             executor,
             permissions,
             maxTurns: config.maxTurns,
-            mode: (opts.mode as any) ?? 'auto',
+            mode: (opts.mode as AgentMode) ?? "auto",
           });
-          
+
           agentRef.current = newAgent;
           console.log(`  ${c.green}✓ Provider: ${arg}${c.reset}`);
           return { newProvider: arg };
@@ -612,35 +904,37 @@ async function handleCommand(
         console.log(`  ${c.yellow}Provider: ${currentProvider}${c.reset}`);
       }
       break;
-      
-    case '/mode':
-      if (arg && ['plan', 'act', 'auto', 'review'].includes(arg)) {
+
+    case "/mode":
+      if (arg && ["plan", "act", "auto", "review"].includes(arg)) {
         opts.mode = arg;
-        agentRef.current.setMode(arg as any);
+        agentRef.current.setMode(arg as AgentMode);
         console.log(`  ${c.green}✓ Mode: ${arg}${c.reset}`);
         currentMode = arg;
-        updateStatus('idle', `Mode: ${arg}`);
+        updateStatus("idle", `Mode: ${arg}`);
       } else {
         console.log(`  ${c.yellow}Mode: ${currentMode}${c.reset}`);
         console.log(`  ${c.dim}Options: plan, act, auto, review${c.reset}`);
       }
       break;
-      
-    case '/clear':
+
+    case "/clear":
       console.clear();
       printHeader();
       break;
-      
-    case '/help':
+
+    case "/help":
       console.log(`\n  ${c.cyan}Commands:${c.reset}`);
       console.log(`  ${c.white}/model <name>${c.reset}   - Switch model`);
       console.log(`  ${c.white}/provider <name>${c.reset} - Switch provider`);
-      console.log(`  ${c.white}/mode <name>${c.reset}    - Set mode (plan/act/auto/review)`);
+      console.log(
+        `  ${c.white}/mode <name>${c.reset}    - Set mode (plan/act/auto/review)`,
+      );
       console.log(`  ${c.white}/clear${c.reset}           - Clear screen`);
       console.log(`  ${c.white}/help${c.reset}           - Show this help`);
       console.log(`  ${c.white}/exit${c.reset}           - Quit\n`);
       break;
-      
+
     default:
       console.log(`  ${c.red}Unknown: ${command}${c.reset}`);
   }
@@ -651,23 +945,70 @@ async function runSingle(prompt: string, options: AgentOptions = {}) {
 
   const thinking = printThinking();
   let isFirstChunk = true;
+  let tBuffer = "";
+  let thinkRendered = false;
 
   try {
     for await (const event of agent.run(prompt)) {
       switch (event.type) {
-        case 'text':
+        case "text": {
+          const chunk = event.content ?? "";
           if (isFirstChunk) {
             thinking.stop();
             isFirstChunk = false;
           }
-          process.stdout.write(event.content ?? '');
+          const combined = tBuffer + chunk;
+          const openIdx = combined.indexOf("<think>");
+          const closeIdx = combined.indexOf("</think>");
+          const hasComplete =
+            openIdx >= 0 && closeIdx >= 0 && closeIdx > openIdx + 6;
+          if (!thinkRendered && hasComplete) {
+            const thinkText = combined.slice(openIdx + 7, closeIdx).trim();
+            if (thinkText) displayThinkingBox(thinkText);
+            const after = combined.slice(closeIdx + 8).trimStart();
+            if (after) {
+              process.stdout.write(
+                `\n  ${c.green}${c.bold}●${c.reset} `,
+              );
+              const clean3 = after.replace(/^\n+/, "");
+              const indented3 = clean3.includes("\n")
+                ? clean3.replace(/\n/g, "\n  ")
+                : clean3;
+              process.stdout.write(indented3);
+              thinkRendered = true;
+            }
+            tBuffer = "";
+            break;
+          }
+          if (!thinkRendered && openIdx >= 0) {
+            tBuffer = combined;
+            break;
+          }
+          if (!thinkRendered) {
+            process.stdout.write(`\n  ${c.green}${c.bold}●${c.reset} `);
+            thinkRendered = true;
+          }
+          const clean2 = combined.replace(/^\n+/, "");
+          const indented2 = clean2.includes("\n")
+            ? clean2.replace(/\n/g, "\n  ")
+            : clean2;
+          process.stdout.write(indented2);
           break;
-        case 'tool_use':
-        case 'tool_result':
+        }
+        case "thinking":
+          if (isFirstChunk) {
+            thinking.stop();
+            isFirstChunk = false;
+          }
+          const tc = (event.content ?? "").replace(/<\/?think>/gi, "").trim();
+          if (tc) displayThinkingBox(tc);
+          break;
+        case "tool_use":
+        case "tool_result":
           break;
       }
     }
-    console.log('');
+    console.log("");
   } catch (err) {
     thinking.stop();
     console.error(`Error: ${err instanceof Error ? err.message : err}`);
@@ -676,250 +1017,351 @@ async function runSingle(prompt: string, options: AgentOptions = {}) {
 
 // Subcommands first
 program
-  .command('chat')
-  .description('Start interactive chat mode')
-  .option('-m, --model <model>', 'Model to use')
-  .option('-p, --provider <provider>', 'Provider to use')
-  .option('--mode <mode>', 'Agent mode (plan/review/act/auto)', 'auto')
-  .option('--hybrid', 'Enable hybrid mode')
+  .command("chat")
+  .description("Start interactive chat mode")
+  .option("-m, --model <model>", "Model to use")
+  .option("-p, --provider <provider>", "Provider to use")
+  .option("--mode <mode>", "Agent mode (plan/review/act/auto)", "auto")
+  .option("--hybrid", "Enable hybrid mode")
   .action(async (options) => {
     await runInteractive(options);
   });
 
 program
-  .command('run <prompt>')
-  .description('Run a single prompt and exit')
-  .option('-m, --model <model>', 'Model to use')
-  .option('-p, --provider <provider>', 'Provider to use')
-  .option('--mode <mode>', 'Agent mode (plan/review/act/auto)', 'act')
-  .option('--hybrid', 'Enable hybrid mode')
+  .command("run <prompt>")
+  .description("Run a single prompt and exit")
+  .option("-m, --model <model>", "Model to use")
+  .option("-p, --provider <provider>", "Provider to use")
+  .option("--mode <mode>", "Agent mode (plan/review/act/auto)", "act")
+  .option("--hybrid", "Enable hybrid mode")
   .action(async (prompt, options) => {
     await runSingle(prompt, options);
     process.exit(0);
   });
 
 program
-  .command('models')
-  .description('List available models')
+  .command("models")
+  .description("List available models")
   .action(() => {
-    console.log('');
+    console.log("");
     console.log(`  ${c.cyan}${c.bold}Available Models:${c.reset}`);
-    console.log('');
-    
+    console.log("");
+
     const config = loadConfig();
     for (const [provider, pConfig] of Object.entries(config.providers)) {
       console.log(`  ${c.green}${c.bold}${provider}${c.reset}`);
       for (const model of Object.keys(pConfig.models)) {
         console.log(`    ${c.white}• ${model}${c.reset}`);
       }
-      console.log('');
+      console.log("");
     }
   });
 
 program
-  .command('doctor')
-  .description('Check configuration and environment')
+  .command("doctor")
+  .description("Check configuration and environment")
   .action(() => {
-    console.log('');
+    console.log("");
     console.log(`  ${c.cyan}${c.bold}HalfCopilot Doctor${c.reset}`);
-    console.log('');
-    
+    console.log("");
+
     try {
       const config = loadConfig();
       console.log(`  ${c.green}✓${c.reset} Configuration loaded`);
-      console.log(`  ${c.green}✓${c.reset} Providers: ${Object.keys(config.providers).join(', ')}`);
-      console.log(`  ${c.green}✓${c.reset} Default: ${config.defaultProvider}/${config.defaultModel}`);
-      
+      console.log(
+        `  ${c.green}✓${c.reset} Providers: ${Object.keys(config.providers).join(", ")}`,
+      );
+      console.log(
+        `  ${c.green}✓${c.reset} Default: ${config.defaultProvider}/${config.defaultModel}`,
+      );
+
       const toolRegistry = new ToolRegistry();
-      createBuiltinTools().forEach(t => toolRegistry.register(t));
-      console.log(`  ${c.green}✓${c.reset} Tools: ${toolRegistry.list().length} available`);
-      
+      createBuiltinTools().forEach((t) => toolRegistry.register(t));
+      console.log(
+        `  ${c.green}✓${c.reset} Tools: ${toolRegistry.list().length} available`,
+      );
+
       const skillRegistry = new SkillRegistry();
-      createBuiltinSkills().forEach(s => skillRegistry.register(s));
-      console.log(`  ${c.green}✓${c.reset} Skills: ${skillRegistry.list().length} available`);
-      
-      console.log('');
+      createBuiltinSkills().forEach((s) => skillRegistry.register(s));
+      console.log(
+        `  ${c.green}✓${c.reset} Skills: ${skillRegistry.list().length} available`,
+      );
+
+      console.log("");
       console.log(`  ${c.green}${c.bold}All checks passed! ✓${c.reset}`);
-      console.log('');
+      console.log("");
     } catch (err) {
-      console.log(`  ${c.red}✗ Error: ${err instanceof Error ? err.message : err}${c.reset}`);
+      console.log(
+        `  ${c.red}✗ Error: ${err instanceof Error ? err.message : err}${c.reset}`,
+      );
     }
   });
 
 program
-  .command('skills')
-  .description('List available skills')
+  .command("skills")
+  .description("List available skills")
   .action(() => {
     const skillRegistry = new SkillRegistry();
-    createBuiltinSkills().forEach(s => skillRegistry.register(s));
+    createBuiltinSkills().forEach((s) => skillRegistry.register(s));
 
-    console.log('');
+    console.log("");
     console.log(`  ${c.cyan}${c.bold}Available Skills:${c.reset}`);
-    console.log('');
-    
+    console.log("");
+
     for (const skill of skillRegistry.list()) {
       console.log(`  ${c.green}• ${skill.name}${c.reset}`);
       console.log(`    ${c.dim}${skill.description}${c.reset}`);
     }
-    console.log('');
+    console.log("");
   });
 
 program
-  .command('setup')
-  .description('Interactive setup — configure API keys for model providers')
+  .command("setup")
+  .description("Interactive setup — configure API keys for model providers")
   .action(async () => {
-    const fs = await import('fs');
-    const pathModule = await import('path');
-    const os = await import('os');
-    
-    const configDir = pathModule.join(os.homedir(), '.halfcopilot');
-    const configFile = pathModule.join(configDir, 'settings.json');
-    
+    const fs = await import("fs");
+    const pathModule = await import("path");
+    const os = await import("os");
+
+    const configDir = pathModule.join(os.homedir(), ".halfcopilot");
+    const configFile = pathModule.join(configDir, "settings.json");
+
     // Load existing or create default
-    let config: any = {};
+    let config: Record<string, unknown> = {};
     if (fs.existsSync(configFile)) {
-      config = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+      config = JSON.parse(fs.readFileSync(configFile, "utf-8")) as Record<
+        string,
+        unknown
+      >;
     }
-    if (!config.providers) config.providers = {};
-    
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const ask = (q: string) => new Promise<string>(resolve => rl.question(q, resolve));
-    
+    if (!config.providers) {
+      config.providers = {};
+    }
+    const providersCfg = config.providers as Record<
+      string,
+      Record<string, unknown>
+    >;
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const ask = (q: string) =>
+      new Promise<string>((resolve) => rl.question(q, resolve));
+
     // Print header
-    console.log('');
-    console.log(`${c.cyan}${c.bold}  ╭─────────────────────────────────────────────────────╮${c.reset}`);
-    console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
-    console.log(`${c.cyan}${c.bold}  │           ⚙️  HalfCopilot Setup                     │${c.reset}`);
-    console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
-    console.log(`${c.cyan}${c.bold}  ╰─────────────────────────────────────────────────────╯${c.reset}`);
-    console.log('');
-    
+    console.log("");
+    console.log(
+      `${c.cyan}${c.bold}  ╭─────────────────────────────────────────────────────╮${c.reset}`,
+    );
+    console.log(
+      `${c.cyan}${c.bold}  │                                                     │${c.reset}`,
+    );
+    console.log(
+      `${c.cyan}${c.bold}  │           ⚙️  HalfCopilot Setup                     │${c.reset}`,
+    );
+    console.log(
+      `${c.cyan}${c.bold}  │                                                     │${c.reset}`,
+    );
+    console.log(
+      `${c.cyan}${c.bold}  ╰─────────────────────────────────────────────────────╯${c.reset}`,
+    );
+    console.log("");
+
     // Provider templates - updated with accurate endpoints
     const providers: Array<{
-      name: string; label: string; baseUrl: string; models: string[]; desc: string;
+      name: string;
+      label: string;
+      baseUrl: string;
+      models: string[];
+      desc: string;
     }> = [
-      { name: 'minimax', label: 'MiniMax', desc: 'M2.7 / M2.5 — 海螺AI同款',
-        baseUrl: 'https://api.minimaxi.com/v1', models: ['MiniMax-M2.7', 'MiniMax-M2.5'] },
-      { name: 'xiaomi', label: '小米 MiMo', desc: 'Token Plan API',
-        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'] },
-      { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，深度推理',
-        baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-      { name: 'qwen', label: '通义千问 Qwen', desc: '阿里云出品',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-turbo', 'qwen-plus'] },
-      { name: 'openai', label: 'OpenAI', desc: 'GPT-4o / GPT-4o-mini',
-        baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini'] },
-      { name: 'anthropic', label: 'Anthropic Claude', desc: 'Claude Sonnet 4',
-        baseUrl: '', models: ['claude-sonnet-4-20250514'] },
+      {
+        name: "minimax",
+        label: "MiniMax",
+        desc: "M2.7 / M2.5 — 海螺AI同款",
+        baseUrl: "https://api.minimaxi.com/v1",
+        models: ["MiniMax-M2.7", "MiniMax-M2.5"],
+      },
+      {
+        name: "xiaomi",
+        label: "小米 MiMo",
+        desc: "Token Plan API",
+        baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+        models: ["mimo-v2.5-pro", "mimo-v2.5"],
+      },
+      {
+        name: "deepseek",
+        label: "DeepSeek",
+        desc: "高性价比，深度推理",
+        baseUrl: "https://api.deepseek.com/v1",
+        models: ["deepseek-chat", "deepseek-reasoner"],
+      },
+      {
+        name: "qwen",
+        label: "通义千问 Qwen",
+        desc: "阿里云出品",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        models: ["qwen-turbo", "qwen-plus"],
+      },
+      {
+        name: "openai",
+        label: "OpenAI",
+        desc: "GPT-4o / GPT-4o-mini",
+        baseUrl: "https://api.openai.com/v1",
+        models: ["gpt-4o", "gpt-4o-mini"],
+      },
+      {
+        name: "anthropic",
+        label: "Anthropic Claude",
+        desc: "Claude Sonnet 4",
+        baseUrl: "",
+        models: ["claude-sonnet-4-20250514"],
+      },
     ];
-    
-    console.log(`  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`);
-    console.log('');
+
+    console.log(
+      `  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`,
+    );
+    console.log("");
     console.log(`  ${c.cyan}${c.bold}📦 可用厂商:${c.reset}`);
-    console.log('');
-    
+    console.log("");
+
     for (let i = 0; i < providers.length; i++) {
       const p = providers[i];
-      const configured = config.providers[p.name] ? ` ${c.green}(已配置)${c.reset}` : '';
-      console.log(`  ${c.bold}${i + 1}${c.reset}. ${c.white}${p.label}${c.reset} — ${c.dim}${p.desc}${c.reset}${configured}`);
+      const configured = providersCfg[p.name]
+        ? ` ${c.green}(已配置)${c.reset}`
+        : "";
+      console.log(
+        `  ${c.bold}${i + 1}${c.reset}. ${c.white}${p.label}${c.reset} — ${c.dim}${p.desc}${c.reset}${configured}`,
+      );
     }
     console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
-    console.log('');
-    
+    console.log("");
+
     let selectedIdx = -1;
-    
+
     // Keyboard navigation (basic, using enter)
-    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-${providers.length}): ${c.reset}`);
+    const choice = await ask(
+      `  ${c.green}选择你要配置的厂商 (0-${providers.length}): ${c.reset}`,
+    );
     selectedIdx = parseInt(choice.trim()) - 1;
-    
-    if (isNaN(selectedIdx) || selectedIdx < -1 || selectedIdx >= providers.length) {
+
+    if (
+      isNaN(selectedIdx) ||
+      selectedIdx < -1 ||
+      selectedIdx >= providers.length
+    ) {
       console.log(`  ${c.red}无效选择${c.reset}`);
       rl.close();
       return;
     }
-    
+
     if (selectedIdx === -1) {
       console.log(`  ${c.yellow}配置完成！${c.reset}`);
       rl.close();
       return;
     }
-    
+
     const selected = providers[selectedIdx];
-    
-    console.log('');
+
+    console.log("");
     console.log(`  ${c.cyan}配置 ${selected.label}${c.reset}`);
-    
+
     let apiKey: string;
-    
-    if (selected.name === 'xiaomi') {
-      console.log('');
+
+    if (selected.name === "xiaomi") {
+      console.log("");
       console.log(`  ${c.dim}小米 Token Plan API Key 示例格式:${c.reset}`);
       console.log(`  ${c.dim}tp-xxxxxxxxxx...${c.reset}`);
     }
-    
-    if (selected.name === 'minimax') {
-      console.log('');
+
+    if (selected.name === "minimax") {
+      console.log("");
       console.log(`  ${c.dim}MiniMax API Key (来自 minimaxi.com):${c.reset}`);
     }
-    
-    if (selected.name === 'deepseek') {
-      console.log('');
-      console.log(`  ${c.dim}DeepSeek API Key (来自 api.deepseek.com):${c.reset}`);
+
+    if (selected.name === "deepseek") {
+      console.log("");
+      console.log(
+        `  ${c.dim}DeepSeek API Key (来自 api.deepseek.com):${c.reset}`,
+      );
     }
-    
+
     apiKey = await ask(`  ${c.green}API Key: ${c.reset}`);
-    
+
     if (!apiKey.trim()) {
       console.log(`  ${c.yellow}已跳过${c.reset}`);
       rl.close();
       return;
     }
-    
+
     // Build models object with proper context windows
-    const modelConfigs: Record<string, { contextWindow: number; maxOutput: number }> = {};
-    
-    if (selected.name === 'minimax') {
-      modelConfigs['MiniMax-M2.7'] = { contextWindow: 128000, maxOutput: 16384 };
-      modelConfigs['MiniMax-M2.5'] = { contextWindow: 128000, maxOutput: 16384 };
-    } else if (selected.name === 'deepseek') {
-      modelConfigs['deepseek-chat'] = { contextWindow: 64000, maxOutput: 8192 };
-      modelConfigs['deepseek-reasoner'] = { contextWindow: 64000, maxOutput: 8192 };
-    } else if (selected.name === 'xiaomi') {
-      modelConfigs['mimo-v2.5-pro'] = { contextWindow: 128000, maxOutput: 16384 };
-      modelConfigs['mimo-v2.5'] = { contextWindow: 128000, maxOutput: 16384 };
+    const modelConfigs: Record<
+      string,
+      { contextWindow: number; maxOutput: number }
+    > = {};
+
+    if (selected.name === "minimax") {
+      modelConfigs["MiniMax-M2.7"] = {
+        contextWindow: 128000,
+        maxOutput: 16384,
+      };
+      modelConfigs["MiniMax-M2.5"] = {
+        contextWindow: 128000,
+        maxOutput: 16384,
+      };
+    } else if (selected.name === "deepseek") {
+      modelConfigs["deepseek-chat"] = { contextWindow: 64000, maxOutput: 8192 };
+      modelConfigs["deepseek-reasoner"] = {
+        contextWindow: 64000,
+        maxOutput: 8192,
+      };
+    } else if (selected.name === "xiaomi") {
+      modelConfigs["mimo-v2.5-pro"] = {
+        contextWindow: 128000,
+        maxOutput: 16384,
+      };
+      modelConfigs["mimo-v2.5"] = { contextWindow: 128000, maxOutput: 16384 };
     } else {
       for (const m of selected.models) {
         modelConfigs[m] = { contextWindow: 128000, maxOutput: 8192 };
       }
     }
-    
+
     // Save provider config
-    config.providers[selected.name] = {
-      type: selected.name === 'anthropic' ? 'anthropic' : 'openai-compatible',
+    providersCfg[selected.name] = {
+      type: selected.name === "anthropic" ? "anthropic" : "openai-compatible",
       ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
       apiKey,
       models: modelConfigs,
     };
-    
+
     // Set as default if no default set
-    if (!config.defaultProvider) {
-      config.defaultProvider = selected.name;
-      config.defaultModel = selected.models[0];
+    const configAny = config as Record<string, unknown>;
+    if (!configAny.defaultProvider) {
+      configAny.defaultProvider = selected.name;
+      configAny.defaultModel = selected.models[0];
     }
-    
+
     // Write config
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
-    
-    console.log('');
-    console.log(`  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`);
+
+    console.log("");
+    console.log(
+      `  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`,
+    );
     console.log(`  ${c.dim}配置文件: ${configFile}${c.reset}`);
-    console.log(`  ${c.dim}模型: ${Object.keys(modelConfigs).join(', ')}${c.reset}`);
-    
-    if (config.defaultProvider === selected.name) {
+    console.log(
+      `  ${c.dim}模型: ${Object.keys(modelConfigs).join(", ")}${c.reset}`,
+    );
+
+    if (configAny.defaultProvider === selected.name) {
       console.log(`  ${c.green}已设为默认厂商${c.reset}`);
     }
-    console.log('');
-    
+    console.log("");
+
     rl.close();
   });
 

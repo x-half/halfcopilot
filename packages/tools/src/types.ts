@@ -1,9 +1,9 @@
-import type { ToolDef } from '@halfcopilot/provider';
+import type { ToolDef } from "@halfcopilot/provider";
 
 export enum PermissionLevel {
-  SAFE = 'safe',
-  WARN = 'warn',
-  UNSAFE = 'unsafe',
+  SAFE = "safe",
+  WARN = "warn",
+  UNSAFE = "unsafe",
 }
 
 export interface ToolContext {
@@ -21,7 +21,10 @@ export interface ToolResult {
 
 export interface Tool extends ToolDef {
   permissionLevel: PermissionLevel;
-  execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
+  execute(
+    input: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult>;
   toProviderFormat?(): ToolDef;
 }
 

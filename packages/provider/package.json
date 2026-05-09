@@ -12,10 +12,10 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@halfcopilot/shared": "file:../shared",
+    "@anthropic-ai/sdk": "^0.36.0",
     "@halfcopilot/config": "file:../config",
-    "openai": "^4.77.0",
-    "@anthropic-ai/sdk": "^0.36.0"
+    "@halfcopilot/shared": "file:../shared",
+    "openai": "^4.77.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

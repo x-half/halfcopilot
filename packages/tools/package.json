@@ -12,9 +12,9 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@halfcopilot/shared": "file:../shared",
     "@halfcopilot/config": "file:../config",
-    "@halfcopilot/provider": "file:../provider"
+    "@halfcopilot/provider": "file:../provider",
+    "@halfcopilot/shared": "file:../shared"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

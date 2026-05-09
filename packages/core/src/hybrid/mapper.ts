@@ -1,5 +1,5 @@
-import type { TextBlock } from './parser.js';
-import { generateId } from '@halfcopilot/shared';
+import type { TextBlock } from "./parser.js";
+import { generateId } from "@halfcopilot/shared";
 
 export interface ToolCall {
   id: string;
@@ -11,12 +11,12 @@ export class TextBlockToToolCallMapper {
   private readonly mapping: Record<string, (block: TextBlock) => ToolCall> = {
     read: (block) => ({
       id: generateId(),
-      name: 'file_read',
+      name: "file_read",
       input: { path: block.params.path },
     }),
     edit: (block) => ({
       id: generateId(),
-      name: 'file_edit',
+      name: "file_edit",
       input: {
         path: block.params.path,
         oldText: block.params._oldContent,
@@ -25,20 +25,22 @@ export class TextBlockToToolCallMapper {
     }),
     create: (block) => ({
       id: generateId(),
-      name: 'file_write',
+      name: "file_write",
       input: { path: block.params.path, content: block.body },
     }),
     run: (block) => ({
       id: generateId(),
-      name: 'bash',
+      name: "bash",
       input: {
         command: block.params.command,
-        timeout: block.params.timeout ? parseInt(block.params.timeout) : undefined,
+        timeout: block.params.timeout
+          ? parseInt(block.params.timeout)
+          : undefined,
       },
     }),
     search: (block) => ({
       id: generateId(),
-      name: 'grep',
+      name: "grep",
       input: {
         pattern: block.params.pattern,
         glob: block.params.glob,
@@ -46,7 +48,7 @@ export class TextBlockToToolCallMapper {
     }),
     glob: (block) => ({
       id: generateId(),
-      name: 'glob',
+      name: "glob",
       input: { pattern: block.params.pattern },
     }),
   };

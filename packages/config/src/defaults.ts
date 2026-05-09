@@ -1,8 +1,8 @@
-import type { HalfCopilotConfig } from './schema.js';
+import type { HalfCopilotConfig } from "./schema.js";
 
 export const DEFAULT_CONFIG: HalfCopilotConfig = {
   providers: {},
-  mode: 'auto',
+  mode: "auto",
   maxTurns: 50,
   maxTokens: 16384,
   permissions: {
@@ -13,11 +13,11 @@ export const DEFAULT_CONFIG: HalfCopilotConfig = {
   security: {
     autoApprove: [],
     neverApprove: [],
-    protectedPaths: ['/etc', '/System', '~/.ssh', '~/.gnupg'],
-    sensitivePatterns: ['.env', '.env.*', '*.pem', '*.key', '*credentials*'],
+    protectedPaths: ["/etc", "/System", "~/.ssh", "~/.gnupg"],
+    sensitivePatterns: [".env", ".env.*", "*.pem", "*.key", "*credentials*"],
     audit: {
       enabled: true,
-      path: '~/.halfcopilot/audit.log',
+      path: "~/.halfcopilot/audit.log",
     },
   },
   mcpServers: {},
@@ -26,6 +26,6 @@ export const DEFAULT_CONFIG: HalfCopilotConfig = {
     maxSize: 100,
     compactionThreshold: 0.8,
   },
-  theme: 'dark',
+  theme: "dark",
   verbose: false,
 };

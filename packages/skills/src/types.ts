@@ -8,21 +8,23 @@ export interface SkillDefinition {
 }
 
 export interface SkillResource {
-  type: 'file' | 'url' | 'template';
+  type: "file" | "url" | "template";
   path: string;
   description?: string;
 }
 
 export interface SkillTrigger {
-  type: 'keyword' | 'pattern' | 'intent';
+  type: "keyword" | "pattern" | "intent";
   value: string;
 }
 
 export interface SkillContext {
-  projectRoot: string;
+  executeTool: (
+    name: string,
+    input: Record<string, unknown>,
+  ) => Promise<{ output: string; error?: string }>;
   workingDirectory: string;
-  sessionId: string;
-  variables: Record<string, unknown>;
+  projectRoot: string;
 }
 
 export interface SkillResult {
@@ -35,5 +37,8 @@ export interface SkillResult {
 }
 
 export interface Skill extends SkillDefinition {
-  execute(context: SkillContext, input: Record<string, unknown>): Promise<SkillResult>;
+  execute(
+    context: SkillContext,
+    input: Record<string, unknown>,
+  ): Promise<SkillResult>;
 }

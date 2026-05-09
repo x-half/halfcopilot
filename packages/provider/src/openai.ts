@@ -1,8 +1,14 @@
-import OpenAI from 'openai';
-import { BaseProvider } from './base.js';
-import type { ChatParams, ChatEvent, Message, ToolDef, ProviderCapabilities } from './types.js';
-import type { ProviderConfig, ModelConfig } from '@halfcopilot/config';
-import { resolveEnvVar } from '@halfcopilot/shared';
+import OpenAI from "openai";
+import { BaseProvider } from "./base.js";
+import type {
+  ChatParams,
+  ChatEvent,
+  Message,
+  ToolDef,
+  ProviderCapabilities,
+} from "./types.js";
+import type { ProviderConfig, ModelConfig } from "@halfcopilot/config";
+import { resolveEnvVar } from "@halfcopilot/shared";
 
 interface OpenAIProviderOptions {
   name: string;
@@ -37,9 +43,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
     };
   }
 
-  static fromConfig(name: string, config: ProviderConfig): OpenAICompatibleProvider {
+  static fromConfig(
+    name: string,
+    config: ProviderConfig,
+  ): OpenAICompatibleProvider {
     if (!config.baseUrl) {
-      throw new Error(`OpenAI-compatible provider "${name}" requires a baseUrl`);
+      throw new Error(
+        `OpenAI-compatible provider "${name}" requires a baseUrl`,
+      );
     }
     return new OpenAICompatibleProvider({
       name,
@@ -56,7 +67,10 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const stream = await this.client.chat.completions.create({
       model: params.model,
       messages: params.systemPrompt
-        ? [{ role: 'system' as const, content: params.systemPrompt }, ...messages]
+        ? [
+            { role: "system" as const, content: params.systemPrompt },
+            ...messages,
+          ]
         : messages,
       tools: tools as OpenAI.ChatCompletionTool[] | undefined,
       stream: true,
@@ -64,7 +78,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
       max_tokens: params.maxTokens,
     });
 
-    let currentToolCall: { id: string; name: string; args: string } | null = null;
+    let currentToolCall: { id: string; name: string; args: string } | null =
+      null;
     let inputTokens = 0;
     let outputTokens = 0;
 
@@ -75,12 +90,13 @@ export class OpenAICompatibleProvider extends BaseProvider {
       const delta = choice.delta;
 
       if (delta?.content) {
-        yield { type: 'text', content: delta.content };
+        yield { type: "text", content: delta.content };
       }
 
-      const reasoningContent = (delta as any)?.reasoning_content;
+      const reasoningContent = (delta as Record<string, unknown>)
+        ?.reasoning_content as string | undefined;
       if (reasoningContent) {
-        yield { type: 'thinking', content: reasoningContent };
+        yield { type: "thinking", content: reasoningContent };
       }
 
       if (delta?.tool_calls) {
@@ -89,21 +105,25 @@ export class OpenAICompatibleProvider extends BaseProvider {
             if (currentToolCall) {
               try {
                 yield {
-                  type: 'tool_use',
+                  type: "tool_use",
                   id: currentToolCall.id,
                   name: currentToolCall.name,
                   input: JSON.parse(currentToolCall.args),
                 };
               } catch {
                 yield {
-                  type: 'tool_use',
+                  type: "tool_use",
                   id: currentToolCall.id,
                   name: currentToolCall.name,
                   input: {},
                 };
               }
             }
-            currentToolCall = { id: tc.id, name: tc.function?.name ?? '', args: '' };
+            currentToolCall = {
+              id: tc.id,
+              name: tc.function?.name ?? "",
+              args: "",
+            };
           }
           if (tc.function?.arguments && currentToolCall) {
             currentToolCall.args += tc.function.arguments;
@@ -120,14 +140,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
     if (currentToolCall) {
       try {
         yield {
-          type: 'tool_use',
+          type: "tool_use",
           id: currentToolCall.id,
           name: currentToolCall.name,
           input: JSON.parse(currentToolCall.args),
         };
       } catch {
         yield {
-          type: 'tool_use',
+          type: "tool_use",
           id: currentToolCall.id,
           name: currentToolCall.name,
           input: {},
@@ -135,30 +155,30 @@ export class OpenAICompatibleProvider extends BaseProvider {
       }
     }
 
-    yield { type: 'done', usage: { inputTokens, outputTokens } };
+    yield { type: "done", usage: { inputTokens, outputTokens } };
   }
 
   convertMessages(messages: Message[]): OpenAI.ChatCompletionMessageParam[] {
     return messages.map((msg) => {
-      if (msg.role === 'system') {
-        return { role: 'system' as const, content: msg.content };
+      if (msg.role === "system") {
+        return { role: "system" as const, content: msg.content };
       }
-      if (msg.role === 'user') {
-        return { role: 'user' as const, content: msg.content };
+      if (msg.role === "user") {
+        return { role: "user" as const, content: msg.content };
       }
-      if (msg.role === 'assistant') {
-        if (typeof msg.content === 'string') {
-          return { role: 'assistant' as const, content: msg.content };
+      if (msg.role === "assistant") {
+        if (typeof msg.content === "string") {
+          return { role: "assistant" as const, content: msg.content };
         }
         const textParts: string[] = [];
         const toolCalls: OpenAI.ChatCompletionMessageToolCall[] = [];
         for (const block of msg.content) {
-          if (block.type === 'text') {
+          if (block.type === "text") {
             textParts.push(block.text);
-          } else if (block.type === 'tool_use') {
+          } else if (block.type === "tool_use") {
             toolCalls.push({
               id: block.id,
-              type: 'function',
+              type: "function",
               function: {
                 name: block.name,
                 arguments: JSON.stringify(block.input),
@@ -167,25 +187,25 @@ export class OpenAICompatibleProvider extends BaseProvider {
           }
         }
         return {
-          role: 'assistant' as const,
-          content: textParts.join('') || null,
+          role: "assistant" as const,
+          content: textParts.join("") || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         };
       }
-      if (msg.role === 'tool_result') {
+      if (msg.role === "tool_result") {
         return {
-          role: 'tool' as const,
+          role: "tool" as const,
           tool_call_id: msg.toolUseId,
           content: msg.content,
         } as OpenAI.ChatCompletionToolMessageParam;
       }
-      return { role: 'user' as const, content: String(msg) };
+      return { role: "user" as const, content: String(msg) };
     });
   }
 
   convertTools(tools: ToolDef[]): OpenAI.ChatCompletionTool[] {
     return tools.map((tool) => ({
-      type: 'function' as const,
+      type: "function" as const,
       function: {
         name: tool.name,
         description: tool.description,

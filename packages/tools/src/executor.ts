@@ -1,29 +1,46 @@
-import type { ToolRegistry } from './registry.js';
-import type { PermissionChecker } from './permission.js';
-import type { ToolResult, ToolContext } from './types.js';
-import { ToolError, PermissionError } from '@halfcopilot/shared';
+import type { ToolRegistry } from "./registry.js";
+import type { PermissionChecker } from "./permission.js";
+import type { ToolResult, ToolContext } from "./types.js";
+import { ToolError, PermissionError } from "@halfcopilot/shared";
 
 export class ToolExecutor {
   constructor(
     private registry: ToolRegistry,
     private permissions: PermissionChecker,
-    private onApprovalNeeded?: (toolName: string, input: Record<string, unknown>) => Promise<boolean>
+    private onApprovalNeeded?: (
+      toolName: string,
+      input: Record<string, unknown>,
+    ) => Promise<boolean>,
   ) {}
 
-  async execute(name: string, input: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+  async execute(
+    name: string,
+    input: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult> {
     const tool = this.registry.get(name);
 
-    const permResult = await this.permissions.check(name, input, tool.permissionLevel);
+    const permResult = await this.permissions.check(
+      name,
+      input,
+      tool.permissionLevel,
+    );
 
     if (!permResult.approved) {
-      if (permResult.reason === 'requires_confirmation' && this.onApprovalNeeded) {
+      if (
+        permResult.reason === "requires_confirmation" &&
+        this.onApprovalNeeded
+      ) {
         const userApproved = await this.onApprovalNeeded(name, input);
         if (!userApproved) {
-          throw new PermissionError(name, 'User denied permission');
+          throw new PermissionError(name, "User denied permission");
         }
         this.permissions.approve(name, input);
       } else {
-        throw new PermissionError(name, permResult.reason ?? 'Permission denied');
+        throw new PermissionError(
+          name,
+          permResult.reason ?? "Permission denied",
+        );
       }
     }
 
