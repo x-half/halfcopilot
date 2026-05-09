@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.21');
+  .version('1.0.22');
 
 interface AgentOptions {
   model?: string;
@@ -411,7 +411,7 @@ async function runInteractive(options: AgentOptions = {}) {
         if (interrupted) {
           loopEnded = true;
           thinking.stop();
-          process.stdout.write(`\n  ${c.yellow}⏹ Interrupted${c.reset}\n`);
+          process.stdout.write(`\n    ${c.yellow}⏹ Interrupted${c.reset}\n`);
           break;
         }
 
@@ -422,24 +422,32 @@ async function runInteractive(options: AgentOptions = {}) {
                 thinking.stop();
                 thinkingDisplayed = true;
               }
-              process.stdout.write(event.content ?? '');
+              const content = event.content ?? '';
+              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
+              process.stdout.write(`    ${c.gray}${indented}${c.reset}`);
             }
             break;
           case 'text':
             if (!responseStarted) {
               thinking.stop();
               if (thinkingDisplayed) process.stdout.write('\n');
-              process.stdout.write(`\n  ${c.blue}${c.bold}🤖${c.reset} `);
+              process.stdout.write(`\n    ${c.green}${c.bold}●${c.reset} `);
               responseStarted = true;
+              const content = event.content ?? '';
+              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
+              process.stdout.write(indented);
+            } else {
+              const content = event.content ?? '';
+              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
+              process.stdout.write(indented);
             }
-            process.stdout.write(event.content ?? '');
             break;
           case 'tool_use':
             if (!responseStarted) {
               thinking.stop();
               responseStarted = true;
             }
-            process.stdout.write(`\n  ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
+            process.stdout.write(`\n    ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
             break;
           case 'tool_result':
             process.stdout.write(` ${c.gray}✓${c.reset}\n`);
@@ -447,17 +455,11 @@ async function runInteractive(options: AgentOptions = {}) {
           case 'error':
             loopEnded = true;
             thinking.stop();
-            process.stdout.write(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
+            process.stdout.write(`\n    ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
             break;
           case 'done':
             loopEnded = true;
-            if (responseStarted) {
-              process.stdout.write(`\n\n  ${c.dim}${'─'.repeat(36)}${c.reset}\n`);
-              process.stdout.write(`  ${c.green}${c.bold}✅ Done${c.reset}\n`);
-            } else {
-              thinking.stop();
-              process.stdout.write(`\n  ${c.green}${c.bold}✅ Done${c.reset}\n`);
-            }
+            if (responseStarted) process.stdout.write('\n\n');
             break;
         }
       }
@@ -466,7 +468,7 @@ async function runInteractive(options: AgentOptions = {}) {
     } catch (err) {
       thinking.stop();
       const msg = err instanceof Error ? err.message : String(err);
-      process.stdout.write(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
+      process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
     } finally {
       process.stdin.removeListener('data', onData);
       if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw ?? false);
@@ -505,11 +507,7 @@ async function runInteractive(options: AgentOptions = {}) {
       } else {
         // Multiple lines - paste detected, wait for confirmation
         awaitingConfirm = true;
-        const preview = pendingLines.join('\n');
-        const shortPreview = preview.length > 60 ? preview.slice(0, 60) + '...' : preview;
-        console.log(`\n  ${c.dim}${'─'.repeat(36)}${c.reset}`);
-        console.log(`  ${c.dim}📋 已粘贴 ${c.white}${pendingLines.length}${c.dim} 行: ${c.gray}${shortPreview}${c.reset}`);
-        console.log(`  ${c.dim}按 ${c.white}Enter${c.dim} 发送${c.reset}`);
+        process.stdout.write(`  ${c.gray}📋 +${pendingLines.length} lines${c.reset}\n`);
         showPrompt();
       }
     }, 200);
