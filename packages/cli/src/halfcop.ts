@@ -281,22 +281,29 @@ const statusEmoji: Record<AgentStatus, string> = {
   error: '🔴',
 };
 
+// Welcome header is 13 lines; prompt goes at line 14 (after blank line 14)
+const WELCOME_LINES = 13;   // lines in printHeader output
+const STATUS_ROW = 14;     // row where status bar lives (fixed, right after welcome)
+
 function showStatusBar() {
   const left = `${c.gray}${currentProvider}/${currentModel}`;
   const center = `${c.cyan}[${currentMode.toUpperCase()}]`;
   const right = `${statusColors[currentStatus]}${statusEmoji[currentStatus]} ${statusDescription}`;
-  
-  // Pad each section
-  const totalWidth = 70;
+
   const leftPad = '  ';
   const rightPad = '  ';
-  
-  process.stdout.write(`\x1b[999B\r\x1b[K${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}\n`);
-  process.stdout.write(`\x1b[999A`); // Move back up
+  const statusLine = `${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}`;
+
+  // Move to status bar row, erase it, print new status
+  process.stdout.write(`\x1b[${STATUS_ROW};1H`);  // cursor to status row, col 0
+  process.stdout.write(`\x1b[K`);                   // erase the status line
+  process.stdout.write(statusLine);                // print updated status
+  // Leave cursor at end of status line — rl.question will print its own prompt
 }
 
 function hideStatusBar() {
-  process.stdout.write(`\x1b[999B\r\x1b[K\x1b[2J\x1b[H`);
+  process.stdout.write(`\x1b[2K`);                 // erase status line
+  process.stdout.write(`\x1b[${STATUS_ROW};1H`);  // leave cursor at start of status row
 }
 
 function updateStatus(status: AgentStatus, desc?: string) {
