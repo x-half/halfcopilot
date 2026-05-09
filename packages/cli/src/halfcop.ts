@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.23');
+  .version('1.0.24');
 
 interface AgentOptions {
   model?: string;
@@ -277,6 +277,25 @@ function checkConfig(config: any): boolean {
   return true;
 }
 
+// Keypress-based tool approval (no readline question)
+async function askApproval(toolName: string, _input: Record<string, unknown>): Promise<boolean> {
+  return new Promise((resolve) => {
+    process.stdout.write(`  ${c.yellow}Allow ${toolName}? (y/n): ${c.reset}`);
+    const handler = (_str: string | undefined, key: readline.Key) => {
+      if (key.name === 'y') {
+        process.stdin.removeListener('keypress', handler);
+        process.stdout.write('y\n');
+        resolve(true);
+      } else if (key.name === 'n') {
+        process.stdin.removeListener('keypress', handler);
+        process.stdout.write('n\n');
+        resolve(false);
+      }
+    };
+    process.stdin.on('keypress', handler);
+  });
+}
+
 function createAgent(options: AgentOptions = {}) {
   const config = loadConfig();
   
@@ -309,18 +328,7 @@ function createAgent(options: AgentOptions = {}) {
     deny: config.permissions.deny,
   });
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
-    return new Promise((resolve) => {
-      rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
-        resolve(answer.toLowerCase().trim() === 'y');
-      });
-    });
-  });
+  const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
 
   const modelName = options.model ?? config.defaultModel ?? 'mimo-v2.5-pro';
 
@@ -335,11 +343,11 @@ function createAgent(options: AgentOptions = {}) {
     mode: (options.mode as any) ?? 'auto',
   });
 
-  return { agent, providerName, config, skillRegistry, modelName, rl, providerRegistry };
+  return { agent, providerName, config, skillRegistry, modelName, providerRegistry };
 }
 
 async function runInteractive(options: AgentOptions = {}) {
-  const { agent, providerName, config, skillRegistry, modelName, rl, providerRegistry } = createAgent(options);
+  const { agent, providerName, config, skillRegistry, modelName, providerRegistry } = createAgent(options);
 
   currentProvider = providerName;
   currentModel = modelName;
@@ -356,13 +364,111 @@ async function runInteractive(options: AgentOptions = {}) {
   const agentRef: { current: AgentLoop } = { current: agent };
 
   let isProcessing = false;
+  let interruptFlag = false;
+
+  // ------- Raw mode keypress input handling -------
+
+  readline.emitKeypressEvents(process.stdin);
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
   const showPrompt = () => {
-    process.stdout.write(`  ${c.green}${c.bold}❯${c.reset} `);
+    process.stdout.write(PROMPT);
   };
+
+  let lineBuffer = '';
+  let pasteContent = '';
+  let inPasteMode = false;
+  let pasteEndTimer: NodeJS.Timeout | null = null;
+  let lastKeyTime = 0;
+  let rapidKeyCount = 0;
+
+  process.stdin.on('keypress', (str: string | undefined, key: readline.Key) => {
+    if (key.ctrl && key.name === 'c') process.exit();
+
+    // During processing: only ESC for interrupt
+    if (isProcessing) {
+      if (key.name === 'escape') interruptFlag = true;
+      return;
+    }
+
+    const now = Date.now();
+    const gap = now - lastKeyTime;
+    lastKeyTime = now;
+
+    if (gap < 30) rapidKeyCount++;
+    else if (gap > 400) rapidKeyCount = 0;
+
+    // Enter
+    if (key.name === 'return') {
+      process.stdout.write('\n');
+      if (inPasteMode) {
+        inPasteMode = false;
+        if (pasteEndTimer) clearTimeout(pasteEndTimer);
+        let input = pasteContent;
+        if (lineBuffer.trim()) input += ' ' + lineBuffer;
+        pasteContent = '';
+        lineBuffer = '';
+        processInput(input);
+      } else {
+        const input = lineBuffer;
+        lineBuffer = '';
+        if (input.trim()) processInput(input);
+        else showPrompt();
+      }
+      return;
+    }
+
+    // Backspace
+    if (key.name === 'backspace') {
+      if (lineBuffer.length > 0) {
+        lineBuffer = lineBuffer.slice(0, -1);
+        process.stdout.write('\b \b');
+      }
+      return;
+    }
+
+    // Regular character
+    if (!str) return;
+    lineBuffer += str;
+
+    // Paste detection: rapid keypresses with multi-char data or high speed
+    const isPaste = rapidKeyCount > 8 || (str.length > 5 && gap < 20);
+
+    if (isPaste && !inPasteMode) {
+      // Enter paste mode
+      inPasteMode = true;
+      pasteContent = lineBuffer;
+      lineBuffer = '';
+      rapidKeyCount = 0;
+      process.stdout.write('\n');
+      if (pasteEndTimer) clearTimeout(pasteEndTimer);
+      pasteEndTimer = setTimeout(finalizePaste, 300);
+    } else if (inPasteMode) {
+      pasteContent += str;
+      if (pasteEndTimer) clearTimeout(pasteEndTimer);
+      pasteEndTimer = setTimeout(finalizePaste, 300);
+    } else {
+      // Normal typing
+      process.stdout.write(str);
+    }
+  });
+
+  function finalizePaste() {
+    if (!inPasteMode) return;
+    // Don't clear pasteMode yet — wait for Enter
+    const lineCount = pasteContent.split('\n').length;
+    process.stdout.write(`  ${c.gray}📋 +${lineCount} lines${c.reset}\n`);
+    showPrompt();
+  }
+
+  // ------- Agent processing -------
 
   const processInput = async (input: string) => {
     isProcessing = true;
+    interruptFlag = false;
     const trimmed = input.trim();
 
     if (!trimmed) {
@@ -372,7 +478,7 @@ async function runInteractive(options: AgentOptions = {}) {
     }
 
     if (trimmed.startsWith('/')) {
-      const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config, rl);
+      const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config);
       if (result?.newModel) currentModel = result.newModel;
       if (result?.newProvider) currentProvider = result.newProvider;
       isProcessing = false;
@@ -382,25 +488,12 @@ async function runInteractive(options: AgentOptions = {}) {
 
     if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
       console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`);
-      rl.close();
-      return;
+      process.exit(0);
     }
 
     // Thinking animation
     const thinking = createThinkingAnimation();
     thinking.start();
-
-    // ESC interrupt setup
-    let interrupted = false;
-    const wasRaw = process.stdin.isRaw;
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-    }
-    const onData = (chunk: Buffer) => {
-      if (chunk[0] === 0x1b) interrupted = true;
-    };
-    process.stdin.on('data', onData);
 
     let responseStarted = false;
     let thinkingDisplayed = false;
@@ -408,7 +501,8 @@ async function runInteractive(options: AgentOptions = {}) {
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
-        if (interrupted) {
+        if (interruptFlag) {
+          interruptFlag = false;
           loopEnded = true;
           thinking.stop();
           process.stdout.write(`\n    ${c.yellow}⏹ Interrupted${c.reset}\n`);
@@ -470,49 +564,10 @@ async function runInteractive(options: AgentOptions = {}) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
     } finally {
-      process.stdin.removeListener('data', onData);
-      if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw ?? false);
       isProcessing = false;
       showPrompt();
     }
   };
-
-  // Multi-line input: single Enter submits, paste waits for confirmation
-  let pendingLines: string[] = [];
-  let pasteTimer: NodeJS.Timeout | null = null;
-  let awaitingConfirm = false;
-
-  rl.on('line', (line) => {
-    if (isProcessing) return;
-
-    // If awaiting confirmation, the next Enter submits paste + any typed text
-    if (awaitingConfirm) {
-      awaitingConfirm = false;
-      pendingLines.push(line);
-      const fullInput = pendingLines.join('\n');
-      pendingLines = [];
-      processInput(fullInput);
-      return;
-    }
-
-    pendingLines.push(line);
-
-    if (pasteTimer) clearTimeout(pasteTimer);
-
-    pasteTimer = setTimeout(() => {
-      if (pendingLines.length === 1) {
-        // Single line - normal Enter, submit
-        const input = pendingLines[0];
-        pendingLines = [];
-        processInput(input);
-      } else {
-        // Multiple lines - paste detected, wait for confirmation
-        awaitingConfirm = true;
-        process.stdout.write(`\r  ${c.gray}📋 +${pendingLines.length} lines${c.reset}\n`);
-        showPrompt();
-      }
-    }, 200);
-  });
 
   showPrompt();
 }
@@ -529,8 +584,7 @@ async function handleCommand(
   currentProvider: string,
   agentRef: { current: AgentLoop },
   providerRegistry: ProviderRegistry,
-  config: any,
-  rl: readline.Interface
+  config: any
 ): Promise<HandleCommandResult | void> {
   const parts = cmd.split(' ');
   const command = parts[0].toLowerCase();
@@ -556,13 +610,7 @@ async function handleCommand(
             deny: config.permissions.deny,
           });
 
-          const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
-            return new Promise((resolve) => {
-              rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
-                resolve(answer.toLowerCase().trim() === 'y');
-              });
-            });
-          });
+          const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
 
           const newAgent = new AgentLoop({
             provider,
@@ -603,13 +651,7 @@ async function handleCommand(
             deny: config.permissions.deny,
           });
 
-          const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
-            return new Promise((resolve) => {
-              rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
-                resolve(answer.toLowerCase().trim() === 'y');
-              });
-            });
-          });
+          const executor = new ToolExecutor(toolRegistry, permissions, askApproval);
 
           const newAgent = new AgentLoop({
             provider: newProvider,
@@ -667,7 +709,7 @@ async function handleCommand(
 }
 
 async function runSingle(prompt: string, options: AgentOptions = {}) {
-  const { agent, rl } = createAgent(options);
+  const { agent } = createAgent(options);
 
   const thinking = printThinking();
   let isFirstChunk = true;
@@ -692,8 +734,6 @@ async function runSingle(prompt: string, options: AgentOptions = {}) {
     thinking.stop();
     console.error(`Error: ${err instanceof Error ? err.message : err}`);
   }
-  
-  rl.close();
 }
 
 // Subcommands first
