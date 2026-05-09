@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.28');
+  .version('1.0.29');
 
 interface AgentOptions {
   model?: string;
@@ -365,6 +365,12 @@ async function runInteractive(options: AgentOptions = {}) {
 
   let isProcessing = false;
 
+  // ------- raw mode 一次性设置（永不切换）-------
+
+  readline.emitKeypressEvents(process.stdin);
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.resume();
+
   // ------- 标准 readline 输入 -------
 
   const rl = readline.createInterface({
@@ -375,7 +381,6 @@ async function runInteractive(options: AgentOptions = {}) {
   const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
   const ask = () => {
-    process.stdout.write('\r\x1b[K');
     rl.question(PROMPT, async (input) => {
       if (isProcessing) return;
       const trimmed = input.trim();
@@ -406,20 +411,14 @@ async function runInteractive(options: AgentOptions = {}) {
   const processInput = async (input: string) => {
     isProcessing = true;
     const trimmed = input.trim();
-
     if (!trimmed) { isProcessing = false; return; }
 
-    // ESC 中断
+    // ESC 中断：用 keypress 事件（不碰 raw mode）
     let interrupted = false;
-    const origRaw = process.stdin.isRaw;
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-    }
-    const onData = (chunk: Buffer) => {
-      if (chunk[0] === 0x1b) interrupted = true;
+    const onKeypress = (_str: string | undefined, key: readline.Key) => {
+      if (key.name === 'escape') interrupted = true;
     };
-    process.stdin.on('data', onData);
+    process.stdin.on('keypress', onKeypress);
 
     const thinking = createThinkingAnimation();
     thinking.start();
@@ -503,15 +502,7 @@ async function runInteractive(options: AgentOptions = {}) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
     } finally {
-      process.stdin.removeListener('data', onData);
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode(origRaw ?? false);
-        // 清空 stdin 缓冲区，防止残留字符污染下一轮输入
-        let buf: Buffer | null;
-        while ((buf = process.stdin.read()) !== null) {
-          // discard
-        }
-      }
+      process.stdin.removeListener('keypress', onKeypress);
       isProcessing = false;
     }
   };
