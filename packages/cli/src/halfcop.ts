@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.25');
+  .version('1.0.26');
 
 interface AgentOptions {
   model?: string;
@@ -380,15 +380,44 @@ async function runInteractive(options: AgentOptions = {}) {
 
   let lineBuffer = '';
   let pasteContent = '';
-  let inPasteMode = false;
+  let appendBuffer = '';
+  let inPasteMode = false;       // true = 正在粘贴或已粘贴等待提交
+  let pasteBuffering = false;    // true = 粘贴还在收集中（未超时）
   let pasteEndTimer: NodeJS.Timeout | null = null;
   let lastKeyTime = 0;
   let rapidKeyCount = 0;
 
+  // 在同一行显示 ❯ 📋 +X lines + 追加文字
+  function redrawPasteLine() {
+    const lineCount = pasteContent.split('\n').length;
+    const ts = `  ${c.green}${c.bold}❯${c.reset} ${c.gray}📋 +${lineCount} lines${c.reset} ${appendBuffer}`;
+    process.stdout.write('\r\x1b[K' + ts);
+  }
+
+  // 进入粘贴等待模式
+  function enterPasteMode(initial: string) {
+    inPasteMode = true;
+    pasteBuffering = true;
+    pasteContent = initial;
+    appendBuffer = '';
+    rapidKeyCount = 0;
+    process.stdout.write('\r\x1b[K');
+    resetPasteTimer();
+  }
+
+  function resetPasteTimer() {
+    if (pasteEndTimer) clearTimeout(pasteEndTimer);
+    pasteEndTimer = setTimeout(() => {
+      if (!inPasteMode) return;
+      pasteBuffering = false;
+      pasteEndTimer = null;
+      redrawPasteLine();
+    }, 400);
+  }
+
   process.stdin.on('keypress', (str: string | undefined, key: readline.Key) => {
     if (key.ctrl && key.name === 'c') process.exit();
 
-    // During processing: only ESC for interrupt
     if (isProcessing) {
       if (key.name === 'escape') interruptFlag = true;
       return;
@@ -398,24 +427,37 @@ async function runInteractive(options: AgentOptions = {}) {
     const gap = now - lastKeyTime;
     lastKeyTime = now;
 
-    if (gap < 30) rapidKeyCount++;
-    else if (gap > 400) rapidKeyCount = 0;
+    if (gap < 15) rapidKeyCount++;
+    else if (gap > 500) rapidKeyCount = 0;
 
-    // Enter — check if it's part of a paste first
+    // ====== ENTER ======
     if (key.name === 'return') {
-      if (inPasteMode || gap < 30 || rapidKeyCount > 3) {
-        if (!inPasteMode) {
-          inPasteMode = true;
-          pasteContent = lineBuffer + '\n';
-          lineBuffer = '';
-          rapidKeyCount = 0;
-        } else {
-          pasteContent += '\n';
-        }
-        if (pasteEndTimer) clearTimeout(pasteEndTimer);
-        pasteEndTimer = setTimeout(finalizePaste, 300);
+      if (inPasteMode && pasteBuffering) {
+        // 粘贴收集中：\n 是粘贴内容
+        pasteContent += '\n';
+        resetPasteTimer();
         return;
       }
+      if (inPasteMode) {
+        // 粘贴完成，提交
+        inPasteMode = false;
+        pasteBuffering = false;
+        if (pasteEndTimer) { clearTimeout(pasteEndTimer); pasteEndTimer = null; }
+        let input = pasteContent;
+        if (appendBuffer.trim()) input += ' ' + appendBuffer;
+        pasteContent = '';
+        appendBuffer = '';
+        process.stdout.write('\n');
+        processInput(input);
+        return;
+      }
+      if (rapidKeyCount > 6) {
+        // 快速连击中的 \n → 粘贴内容
+        enterPasteMode(lineBuffer + '\n');
+        lineBuffer = '';
+        return;
+      }
+      // 正常提交
       process.stdout.write('\n');
       const input = lineBuffer;
       lineBuffer = '';
@@ -424,46 +466,39 @@ async function runInteractive(options: AgentOptions = {}) {
       return;
     }
 
-    // Backspace
+    // ====== BACKSPACE ======
     if (key.name === 'backspace') {
-      if (inPasteMode) return; // don't edit while paste is accumulating
-      if (lineBuffer.length > 0) {
+      if (pasteBuffering) return; // 收集中不能编辑
+      if (inPasteMode) {
+        if (appendBuffer.length > 0) {
+          appendBuffer = appendBuffer.slice(0, -1);
+          redrawPasteLine();
+        }
+      } else if (lineBuffer.length > 0) {
         lineBuffer = lineBuffer.slice(0, -1);
         process.stdout.write('\b \b');
       }
       return;
     }
 
-    // Regular character
+    // ====== 字符 ======
     if (!str) return;
 
-    // Paste detection: 2nd char arriving within 30ms = paste
-    if (!inPasteMode && gap < 30 && lineBuffer.length > 0) {
-      // Erase the 1 echoed char, enter paste mode
-      process.stdout.write('\b \b');
-      inPasteMode = true;
-      pasteContent = lineBuffer + str;
-      lineBuffer = '';
-      rapidKeyCount = 0;
-      if (pasteEndTimer) clearTimeout(pasteEndTimer);
-      pasteEndTimer = setTimeout(finalizePaste, 300);
-    } else if (inPasteMode) {
+    if (pasteBuffering) {
       pasteContent += str;
-      if (pasteEndTimer) clearTimeout(pasteEndTimer);
-      pasteEndTimer = setTimeout(finalizePaste, 300);
+      resetPasteTimer();
+    } else if (inPasteMode) {
+      // 粘贴已完成，用户追加文字
+      appendBuffer += str;
+      redrawPasteLine();
+    } else if (rapidKeyCount > 6 || (gap < 20 && lineBuffer.length > 0)) {
+      enterPasteMode(lineBuffer + str);
+      lineBuffer = '';
     } else {
       lineBuffer += str;
       process.stdout.write(str);
     }
   });
-
-  function finalizePaste() {
-    if (!inPasteMode) return;
-    // Don't clear pasteMode yet — wait for Enter
-    const lineCount = pasteContent.split('\n').length;
-    process.stdout.write(`  ${c.gray}📋 +${lineCount} lines${c.reset}\n`);
-    showPrompt();
-  }
 
   // ------- Agent processing -------
 
