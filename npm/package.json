@@ -1,7 +1,7 @@
 {
   "name": "halfcopilot",
-  "version": "1.0.13",
-  "description": "HalfCopilot — Multi-model Agent Framework CLI with Beautiful Chat Interface",
+  "version": "1.0.14",
+  "description": "HalfCopilot \u2014 Multi-model Agent Framework CLI with Beautiful Chat Interface",
   "type": "module",
   "bin": {
     "halfcop": "./bin/halfcop.js",
