@@ -28,25 +28,25 @@ interface AgentOptions {
 
 // Beautiful color palette
 const c = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
+  reset: '[0m',
+  bold: '[1m',
+  dim: '[2m',
   
   // Colors
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  magenta: '\x1b[35m',
-  blue: '\x1b[34m',
-  white: '\x1b[37m',
-  gray: '\x1b[90m',
+  cyan: '[36m',
+  green: '[32m',
+  yellow: '[33m',
+  red: '[31m',
+  magenta: '[35m',
+  blue: '[34m',
+  white: '[37m',
+  gray: '[90m',
   
   // Background
-  bgCyan: '\x1b[46m',
-  bgGreen: '\x1b[42m',
-  bgYellow: '\x1b[43m',
-  bgBlue: '\x1b[44m',
+  bgCyan: '[46m',
+  bgGreen: '[42m',
+  bgYellow: '[43m',
+  bgBlue: '[44m',
 };
 
 // Box drawing characters
@@ -295,15 +295,15 @@ function showStatusBar() {
   const statusLine = `${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}`;
 
   // Move to status bar row, erase it, print new status
-  process.stdout.write(`\x1b[${STATUS_ROW};1H`);  // cursor to status row, col 0
-  process.stdout.write(`\x1b[K`);                   // erase the status line
+  process.stdout.write(`[${STATUS_ROW};1H`);  // cursor to status row, col 0
+  process.stdout.write(`[K`);                   // erase the status line
   process.stdout.write(statusLine);                // print updated status
   // Leave cursor at end of status line — rl.question will print its own prompt
 }
 
 function hideStatusBar() {
-  process.stdout.write(`\x1b[2K`);                 // erase status line
-  process.stdout.write(`\x1b[${STATUS_ROW};1H`);  // leave cursor at start of status row
+  process.stdout.write(`[2K`);                 // erase status line
+  process.stdout.write(`[${STATUS_ROW};1H`);  // leave cursor at start of status row
 }
 
 function updateStatus(status: AgentStatus, desc?: string) {

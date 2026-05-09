@@ -8,3 +8,4 @@ dist/
 .halfcopilot/
 coverage/
 package-lock.json
+npm/.npmrc
