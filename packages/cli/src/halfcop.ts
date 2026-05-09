@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.20');
+  .version('1.0.21');
 
 interface AgentOptions {
   model?: string;
@@ -356,8 +356,6 @@ async function runInteractive(options: AgentOptions = {}) {
   const agentRef: { current: AgentLoop } = { current: agent };
 
   let isProcessing = false;
-  let inputBuffer: string[] = [];
-  let debounceTimer: NodeJS.Timeout | null = null;
 
   const showPrompt = () => {
     process.stdout.write(`  ${c.green}${c.bold}❯${c.reset} `);
@@ -406,10 +404,12 @@ async function runInteractive(options: AgentOptions = {}) {
 
     let responseStarted = false;
     let thinkingDisplayed = false;
+    let loopEnded = false;
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
         if (interrupted) {
+          loopEnded = true;
           thinking.stop();
           process.stdout.write(`\n  ${c.yellow}⏹ Interrupted${c.reset}\n`);
           break;
@@ -445,14 +445,24 @@ async function runInteractive(options: AgentOptions = {}) {
             process.stdout.write(` ${c.gray}✓${c.reset}\n`);
             break;
           case 'error':
+            loopEnded = true;
             thinking.stop();
             process.stdout.write(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
+            break;
+          case 'done':
+            loopEnded = true;
+            if (responseStarted) {
+              process.stdout.write(`\n\n  ${c.dim}${'─'.repeat(36)}${c.reset}\n`);
+              process.stdout.write(`  ${c.green}${c.bold}✅ Done${c.reset}\n`);
+            } else {
+              thinking.stop();
+              process.stdout.write(`\n  ${c.green}${c.bold}✅ Done${c.reset}\n`);
+            }
             break;
         }
       }
 
-      if (responseStarted) process.stdout.write('\n\n');
-      else thinking.stop();
+      if (!loopEnded) thinking.stop();
     } catch (err) {
       thinking.stop();
       const msg = err instanceof Error ? err.message : String(err);
@@ -465,16 +475,44 @@ async function runInteractive(options: AgentOptions = {}) {
     }
   };
 
-  // Multi-line input with debounce for paste
+  // Multi-line input: single Enter submits, paste waits for confirmation
+  let pendingLines: string[] = [];
+  let pasteTimer: NodeJS.Timeout | null = null;
+  let awaitingConfirm = false;
+
   rl.on('line', (line) => {
     if (isProcessing) return;
-    inputBuffer.push(line);
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const fullInput = inputBuffer.join('\n');
-      inputBuffer = [];
+
+    // If awaiting confirmation, the next Enter submits the paste
+    if (awaitingConfirm) {
+      awaitingConfirm = false;
+      const fullInput = pendingLines.join('\n');
+      pendingLines = [];
       processInput(fullInput);
-    }, 50);
+      return;
+    }
+
+    pendingLines.push(line);
+
+    if (pasteTimer) clearTimeout(pasteTimer);
+
+    pasteTimer = setTimeout(() => {
+      if (pendingLines.length === 1) {
+        // Single line - normal Enter, submit
+        const input = pendingLines[0];
+        pendingLines = [];
+        processInput(input);
+      } else {
+        // Multiple lines - paste detected, wait for confirmation
+        awaitingConfirm = true;
+        const preview = pendingLines.join('\n');
+        const shortPreview = preview.length > 60 ? preview.slice(0, 60) + '...' : preview;
+        console.log(`\n  ${c.dim}${'─'.repeat(36)}${c.reset}`);
+        console.log(`  ${c.dim}📋 已粘贴 ${c.white}${pendingLines.length}${c.dim} 行: ${c.gray}${shortPreview}${c.reset}`);
+        console.log(`  ${c.dim}按 ${c.white}Enter${c.dim} 发送${c.reset}`);
+        showPrompt();
+      }
+    }, 200);
   });
 
   showPrompt();
