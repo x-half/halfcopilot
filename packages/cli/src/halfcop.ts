@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('0.0.1');
+  .version('1.0.11');
 
 interface AgentOptions {
   model?: string;
@@ -390,7 +390,6 @@ async function runInteractive(options: AgentOptions = {}) {
   currentProvider = providerName;
   currentModel = modelName;
   currentMode = options.mode ?? 'auto';
-  updateStatus('idle', 'Ready');
 
   printHeader();
   printInfo('Provider', providerName);
@@ -399,6 +398,7 @@ async function runInteractive(options: AgentOptions = {}) {
   console.log('');
   console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
   console.log('');
+  updateStatus('idle', 'Ready');
 
   // Agent ref that can be swapped (for provider/model switching)
   const agentRef: { current: AgentLoop } = { current: agent };
