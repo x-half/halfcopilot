@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.24');
+  .version('1.0.25');
 
 interface AgentOptions {
   model?: string;
@@ -401,28 +401,32 @@ async function runInteractive(options: AgentOptions = {}) {
     if (gap < 30) rapidKeyCount++;
     else if (gap > 400) rapidKeyCount = 0;
 
-    // Enter
+    // Enter — check if it's part of a paste first
     if (key.name === 'return') {
-      process.stdout.write('\n');
-      if (inPasteMode) {
-        inPasteMode = false;
+      if (inPasteMode || gap < 30 || rapidKeyCount > 3) {
+        if (!inPasteMode) {
+          inPasteMode = true;
+          pasteContent = lineBuffer + '\n';
+          lineBuffer = '';
+          rapidKeyCount = 0;
+        } else {
+          pasteContent += '\n';
+        }
         if (pasteEndTimer) clearTimeout(pasteEndTimer);
-        let input = pasteContent;
-        if (lineBuffer.trim()) input += ' ' + lineBuffer;
-        pasteContent = '';
-        lineBuffer = '';
-        processInput(input);
-      } else {
-        const input = lineBuffer;
-        lineBuffer = '';
-        if (input.trim()) processInput(input);
-        else showPrompt();
+        pasteEndTimer = setTimeout(finalizePaste, 300);
+        return;
       }
+      process.stdout.write('\n');
+      const input = lineBuffer;
+      lineBuffer = '';
+      if (input.trim()) processInput(input);
+      else showPrompt();
       return;
     }
 
     // Backspace
     if (key.name === 'backspace') {
+      if (inPasteMode) return; // don't edit while paste is accumulating
       if (lineBuffer.length > 0) {
         lineBuffer = lineBuffer.slice(0, -1);
         process.stdout.write('\b \b');
@@ -432,18 +436,15 @@ async function runInteractive(options: AgentOptions = {}) {
 
     // Regular character
     if (!str) return;
-    lineBuffer += str;
 
-    // Paste detection: rapid keypresses with multi-char data or high speed
-    const isPaste = rapidKeyCount > 8 || (str.length > 5 && gap < 20);
-
-    if (isPaste && !inPasteMode) {
-      // Enter paste mode
+    // Paste detection: 2nd char arriving within 30ms = paste
+    if (!inPasteMode && gap < 30 && lineBuffer.length > 0) {
+      // Erase the 1 echoed char, enter paste mode
+      process.stdout.write('\b \b');
       inPasteMode = true;
-      pasteContent = lineBuffer;
+      pasteContent = lineBuffer + str;
       lineBuffer = '';
       rapidKeyCount = 0;
-      process.stdout.write('\n');
       if (pasteEndTimer) clearTimeout(pasteEndTimer);
       pasteEndTimer = setTimeout(finalizePaste, 300);
     } else if (inPasteMode) {
@@ -451,7 +452,7 @@ async function runInteractive(options: AgentOptions = {}) {
       if (pasteEndTimer) clearTimeout(pasteEndTimer);
       pasteEndTimer = setTimeout(finalizePaste, 300);
     } else {
-      // Normal typing
+      lineBuffer += str;
       process.stdout.write(str);
     }
   });
@@ -498,6 +499,7 @@ async function runInteractive(options: AgentOptions = {}) {
     let responseStarted = false;
     let thinkingDisplayed = false;
     let loopEnded = false;
+    let atLineStart = false;
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
@@ -506,6 +508,7 @@ async function runInteractive(options: AgentOptions = {}) {
           loopEnded = true;
           thinking.stop();
           process.stdout.write(`\n    ${c.yellow}⏹ Interrupted${c.reset}\n`);
+          atLineStart = true;
           break;
         }
 
@@ -527,13 +530,19 @@ async function runInteractive(options: AgentOptions = {}) {
               if (thinkingDisplayed) process.stdout.write('\n');
               process.stdout.write(`\n    ${c.green}${c.bold}●${c.reset} `);
               responseStarted = true;
-              const content = event.content ?? '';
-              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
+              atLineStart = false;
+            } else if (atLineStart) {
+              process.stdout.write(`    `);
+              atLineStart = false;
+            }
+            const tContent = event.content ?? '';
+            if (tContent.includes('\n')) {
+              const indented = tContent.replace(/\n/g, '\n    ');
               process.stdout.write(indented);
+              atLineStart = tContent.endsWith('\n');
             } else {
-              const content = event.content ?? '';
-              const indented = content.includes('\n') ? content.replace(/\n/g, '\n    ') : content;
-              process.stdout.write(indented);
+              process.stdout.write(tContent);
+              atLineStart = false;
             }
             break;
           case 'tool_use':
@@ -545,15 +554,18 @@ async function runInteractive(options: AgentOptions = {}) {
             break;
           case 'tool_result':
             process.stdout.write(` ${c.gray}✓${c.reset}\n`);
+            atLineStart = true;
             break;
           case 'error':
             loopEnded = true;
             thinking.stop();
             process.stdout.write(`\n    ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
+            atLineStart = true;
             break;
           case 'done':
             loopEnded = true;
             if (responseStarted) process.stdout.write('\n\n');
+            atLineStart = true;
             break;
         }
       }
@@ -563,6 +575,7 @@ async function runInteractive(options: AgentOptions = {}) {
       thinking.stop();
       const msg = err instanceof Error ? err.message : String(err);
       process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
+      atLineStart = true;
     } finally {
       isProcessing = false;
       showPrompt();
