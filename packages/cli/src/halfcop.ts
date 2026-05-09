@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.27');
+  .version('1.0.28');
 
 interface AgentOptions {
   model?: string;
@@ -375,6 +375,7 @@ async function runInteractive(options: AgentOptions = {}) {
   const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
   const ask = () => {
+    process.stdout.write('\r\x1b[K');
     rl.question(PROMPT, async (input) => {
       if (isProcessing) return;
       const trimmed = input.trim();
@@ -503,7 +504,14 @@ async function runInteractive(options: AgentOptions = {}) {
       process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
     } finally {
       process.stdin.removeListener('data', onData);
-      if (process.stdin.isTTY) process.stdin.setRawMode(origRaw ?? false);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(origRaw ?? false);
+        // 清空 stdin 缓冲区，防止残留字符污染下一轮输入
+        let buf: Buffer | null;
+        while ((buf = process.stdin.read()) !== null) {
+          // discard
+        }
+      }
       isProcessing = false;
     }
   };
