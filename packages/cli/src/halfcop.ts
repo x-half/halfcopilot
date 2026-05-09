@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.16');
+  .version('1.0.20');
 
 interface AgentOptions {
   model?: string;
@@ -66,6 +66,36 @@ type AgentStatus = 'idle' | 'thinking' | 'executing' | 'completed' | 'error';
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Bouncing bar animation (like opencode style)
+function createThinkingAnimation() {
+  let interval: NodeJS.Timeout | null = null;
+  let pos = 0;
+  let dir = 1;
+  const width = 8;
+
+  const start = () => {
+    const render = () => {
+      const left = ' '.repeat(Math.max(0, pos));
+      const right = ' '.repeat(Math.max(0, width - pos - 1));
+      process.stdout.write(`\r ${c.cyan}${c.dim}┃${c.reset}${left}${c.cyan}${c.bold}█${c.reset}${right}${c.cyan}${c.dim}┃${c.reset} ${c.dim}thinking...${c.reset}`);
+      pos += dir;
+      if (pos >= width - 1 || pos <= 0) dir *= -1;
+    };
+    render();
+    interval = setInterval(render, 60);
+  };
+
+  const stop = () => {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    }
+    process.stdout.write('\r' + ' '.repeat(30) + '\r');
+  };
+
+  return { start, stop };
 }
 
 // Animated loading indicator
@@ -311,7 +341,6 @@ function createAgent(options: AgentOptions = {}) {
 async function runInteractive(options: AgentOptions = {}) {
   const { agent, providerName, config, skillRegistry, modelName, rl, providerRegistry } = createAgent(options);
 
-  // Initialize status bar info
   currentProvider = providerName;
   currentModel = modelName;
   currentMode = options.mode ?? 'auto';
@@ -323,96 +352,132 @@ async function runInteractive(options: AgentOptions = {}) {
   console.log('');
   console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
   console.log('');
-  updateStatus('idle', 'Ready');
-  printStatusBar();
 
-  // Agent ref that can be swapped (for provider/model switching)
   const agentRef: { current: AgentLoop } = { current: agent };
 
-  // Blinking cursor animation
-  let cursorInterval: NodeJS.Timeout | null = null;
-  const cursorOn = () => {
-    process.stdout.write(`\r${c.green}${c.bold}  ❯ ${c.reset} `);
-  };
-  const cursorOff = () => {
-    process.stdout.write(`\r${c.green}${c.bold}  █ ${c.reset} `);
-  };
+  let isProcessing = false;
+  let inputBuffer: string[] = [];
+  let debounceTimer: NodeJS.Timeout | null = null;
 
-  const ask = () => {
-    cursorOn();
-    let tick = false;
-    cursorInterval = setInterval(() => {
-      if (tick) cursorOn(); else cursorOff();
-      tick = !tick;
-    }, 500);
-
-    rl.question('', async (input) => {
-      if (cursorInterval) { clearInterval(cursorInterval); cursorInterval = null; }
-      // Erase the blinking cursor line
-      process.stdout.write(`\r${' '.repeat(60)}\r`);
-      const trimmed = (input || '').trim();
-
-      if (!trimmed || trimmed === '') { ask(); return; }
-      if (trimmed.startsWith('/')) {
-        const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config, rl);
-        if (result?.newModel) {
-          currentModel = result.newModel;
-          updateStatus('idle', 'Ready');
-          printStatusBar();
-        }
-        if (result?.newProvider) {
-          currentProvider = result.newProvider;
-          updateStatus('idle', 'Ready');
-          printStatusBar();
-        }
-        ask();
-        return;
-      }
-      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
-        console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`); rl.close(); return;
-      }
-      if (trimmed === '') { ask(); return; }
-
-      // Print thinking indicator
-      process.stdout.write(`\n  ${c.yellow}🟡 thinking...${c.reset}\n\n`);
-      let responseText = '';
-
-      try {
-        for await (const event of agentRef.current.run(trimmed)) {
-          switch (event.type) {
-            case 'text':
-              responseText += event.content ?? '';
-              break;
-            case 'tool_use':
-              process.stdout.write(`  ${c.cyan}🔧 running ${event.toolName}...${c.reset}\n`);
-              break;
-            case 'tool_result':
-              process.stdout.write(`  ${c.gray}✓ done${c.reset}\n`);
-              break;
-            case 'error':
-              process.stdout.write(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n\n`);
-              break;
-            case 'done':
-              break;
-          }
-        }
-
-        // Print response in a box with markdown stripped
-        if (responseText) {
-          printMarkdownBox(responseText);
-        }
-      } catch (err) {
-        updateStatus('error', 'Error');
-        printStatusBar();
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}`);
-      }
-
-      ask();
-    });
+  const showPrompt = () => {
+    process.stdout.write(`  ${c.green}${c.bold}❯${c.reset} `);
   };
 
-  ask();
+  const processInput = async (input: string) => {
+    isProcessing = true;
+    const trimmed = input.trim();
+
+    if (!trimmed) {
+      isProcessing = false;
+      showPrompt();
+      return;
+    }
+
+    if (trimmed.startsWith('/')) {
+      const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config, rl);
+      if (result?.newModel) currentModel = result.newModel;
+      if (result?.newProvider) currentProvider = result.newProvider;
+      isProcessing = false;
+      showPrompt();
+      return;
+    }
+
+    if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+      console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`);
+      rl.close();
+      return;
+    }
+
+    // Thinking animation
+    const thinking = createThinkingAnimation();
+    thinking.start();
+
+    // ESC interrupt setup
+    let interrupted = false;
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+    }
+    const onData = (chunk: Buffer) => {
+      if (chunk[0] === 0x1b) interrupted = true;
+    };
+    process.stdin.on('data', onData);
+
+    let responseStarted = false;
+    let thinkingDisplayed = false;
+
+    try {
+      for await (const event of agentRef.current.run(trimmed)) {
+        if (interrupted) {
+          thinking.stop();
+          process.stdout.write(`\n  ${c.yellow}⏹ Interrupted${c.reset}\n`);
+          break;
+        }
+
+        switch (event.type) {
+          case 'thinking':
+            if (!responseStarted) {
+              if (!thinkingDisplayed) {
+                thinking.stop();
+                thinkingDisplayed = true;
+              }
+              process.stdout.write(event.content ?? '');
+            }
+            break;
+          case 'text':
+            if (!responseStarted) {
+              thinking.stop();
+              if (thinkingDisplayed) process.stdout.write('\n');
+              process.stdout.write(`\n  ${c.blue}${c.bold}🤖${c.reset} `);
+              responseStarted = true;
+            }
+            process.stdout.write(event.content ?? '');
+            break;
+          case 'tool_use':
+            if (!responseStarted) {
+              thinking.stop();
+              responseStarted = true;
+            }
+            process.stdout.write(`\n  ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
+            break;
+          case 'tool_result':
+            process.stdout.write(` ${c.gray}✓${c.reset}\n`);
+            break;
+          case 'error':
+            thinking.stop();
+            process.stdout.write(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n`);
+            break;
+        }
+      }
+
+      if (responseStarted) process.stdout.write('\n\n');
+      else thinking.stop();
+    } catch (err) {
+      thinking.stop();
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
+    } finally {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw ?? false);
+      isProcessing = false;
+      showPrompt();
+    }
+  };
+
+  // Multi-line input with debounce for paste
+  rl.on('line', (line) => {
+    if (isProcessing) return;
+    inputBuffer.push(line);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const fullInput = inputBuffer.join('\n');
+      inputBuffer = [];
+      processInput(fullInput);
+    }, 50);
+  });
+
+  showPrompt();
 }
 
 interface HandleCommandResult {

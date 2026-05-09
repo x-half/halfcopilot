@@ -78,6 +78,11 @@ export class OpenAICompatibleProvider extends BaseProvider {
         yield { type: 'text', content: delta.content };
       }
 
+      const reasoningContent = (delta as any)?.reasoning_content;
+      if (reasoningContent) {
+        yield { type: 'thinking', content: reasoningContent };
+      }
+
       if (delta?.tool_calls) {
         for (const tc of delta.tool_calls) {
           if (tc.id) {
