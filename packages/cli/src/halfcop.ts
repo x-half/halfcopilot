@@ -97,118 +97,15 @@ function printBox(content: string, color: string = c.cyan, width: number = 50) {
   console.log(`${color}${box.bl}${box.h.repeat(maxLen + 2)}${box.br}${c.reset}`);
 }
 
-// ASCII art for HALF COPILOT using box-drawing characters
-// Each letter is 5 chars tall, 4 chars wide + 1 space = 5 chars
-const ASCII_H = [
-  "█       █ ",
-  "█       █ ",
-  "█████████ ",
-  "█       █ ",
-  "█       █ ",
-];
-
-const ASCII_A = [
-  " ███████  ",
-  "█       █ ",
-  "█████████ ",
-  "█       █ ",
-  "█       █ ",
-];
-
-const ASCII_L = [
-  "█        ",
-  "█        ",
-  "█        ",
-  "█        ",
-  "█████████ ",
-];
-
-const ASCII_F = [
-  "█████████ ",
-  "█        ",
-  "███████  ",
-  "█        ",
-  "█        ",
-];
-
-const ASCII_C = [
-  " ███████ ",
-  "█       █",
-  "█       █",
-  "█       █",
-  " ███████ ",
-];
-
-const ASCII_O = [
-  " ███████ ",
-  "█       █",
-  "█       █",
-  "█       █",
-  " ███████ ",
-];
-
-const ASCII_P = [
-  "█████████ ",
-  "█       █ ",
-  "█████████ ",
-  "█        ",
-  "█        ",
-];
-
-const ASCII_I = [
-  "███████",
-  "  ██  ",
-  "  ██  ",
-  "  ██  ",
-  "███████",
-];
-
-const ASCII_T = [
-  "███████████",
-  "    ██     ",
-  "    ██     ",
-  "    ██     ",
-  "    ██     ",
-];
-
+// Simple banner - no ASCII art that breaks across terminals
 function printHeader() {
   console.log('');
-  const lines: string[] = ['', '', '', '', '', ''];
-  
-  for (let row = 0; row < 6; row++) {
-    let line = `  ${c.cyan}${c.bold}`;
-    
-    if (row === 0) line += '╭' + '─'.repeat(62) + '╮';
-    else if (row === 5) line += '╰' + '─'.repeat(62) + '╯';
-    else if (row === 1 || row === 4) line += '│' + ' '.repeat(62) + '│';
-    else if (row === 2) {
-      // ASCII art line
-      const chars = [
-        ASCII_H[row - 2] ?? '',
-        ASCII_A[row - 2] ?? '',
-        ASCII_L[row - 2] ?? '',
-        ASCII_F[row - 2] ?? '',
-        '  ',
-        ASCII_C[row - 2] ?? '',
-        ASCII_O[row - 2] ?? '',
-        ASCII_P[row - 2] ?? '',
-        ASCII_I[row - 2] ?? '',
-        ASCII_L[row - 2] ?? '',
-        ASCII_O[row - 2] ?? '',
-        ASCII_T[row - 2] ?? '',
-      ];
-      const artLine = chars.join('');
-      const padding = 62 - artLine.length;
-      line += '│' + artLine + ' '.repeat(Math.max(0, padding)) + '│';
-    } else if (row === 3) {
-      const subtitle = 'Multi-model Agent Framework CLI';
-      const padding = 62 - subtitle.length;
-      line += '│' + ' '.repeat(Math.floor(padding / 2)) + c.white + subtitle + c.cyan + ' '.repeat(Math.ceil(padding / 2)) + '│';
-    }
-    
-    line += c.reset;
-    console.log(line);
-  }
+  console.log(`  ${c.cyan}${c.bold}╭${'─'.repeat(62)}╮${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(19)}${c.white}${c.bold}H A L F   C O P I L O T${c.reset}${c.cyan}${' '.repeat(20)}│${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(12)}${c.white}Multi-model Agent Framework CLI${c.reset}${c.cyan}${' '.repeat(17)}│${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
+  console.log(`  ${c.cyan}${c.bold}╰${'─'.repeat(62)}╯${c.reset}`);
   console.log('');
 }
 
@@ -281,35 +178,20 @@ const statusEmoji: Record<AgentStatus, string> = {
   error: '🔴',
 };
 
-// Welcome header is 13 lines; prompt goes at line 14 (after blank line 14)
-const WELCOME_LINES = 13;   // lines in printHeader output
-const STATUS_ROW = 14;     // row where status bar lives (fixed, right after welcome)
-
-function showStatusBar() {
+// Status bar: simple single-line footer printed after header
+function printStatusBar() {
   const left = `${c.gray}${currentProvider}/${currentModel}`;
   const center = `${c.cyan}[${currentMode.toUpperCase()}]`;
   const right = `${statusColors[currentStatus]}${statusEmoji[currentStatus]} ${statusDescription}`;
-
   const leftPad = '  ';
   const rightPad = '  ';
-  const statusLine = `${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}`;
-
-  // Move to status bar row, erase it, print new status
-  process.stdout.write(`[${STATUS_ROW};1H`);  // cursor to status row, col 0
-  process.stdout.write(`[K`);                   // erase the status line
-  process.stdout.write(statusLine);                // print updated status
-  // Leave cursor at end of status line — rl.question will print its own prompt
+  console.log(`${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}`);
 }
 
-function hideStatusBar() {
-  process.stdout.write(`[2K`);                 // erase status line
-  process.stdout.write(`[${STATUS_ROW};1H`);  // leave cursor at start of status row
-}
-
+// updateStatus tracks state; printStatusBar() called at key moments only
 function updateStatus(status: AgentStatus, desc?: string) {
   currentStatus = status;
   if (desc) statusDescription = desc;
-  showStatusBar();
 }
 
 function checkConfig(config: any): boolean {
@@ -406,6 +288,7 @@ async function runInteractive(options: AgentOptions = {}) {
   console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
   console.log('');
   updateStatus('idle', 'Ready');
+  printStatusBar();
 
   // Agent ref that can be swapped (for provider/model switching)
   const agentRef: { current: AgentLoop } = { current: agent };
@@ -419,10 +302,12 @@ async function runInteractive(options: AgentOptions = {}) {
         if (result?.newModel) {
           currentModel = result.newModel;
           updateStatus('idle', 'Ready');
+          printStatusBar();
         }
         if (result?.newProvider) {
           currentProvider = result.newProvider;
           updateStatus('idle', 'Ready');
+          printStatusBar();
         }
         ask();
         return;
@@ -433,6 +318,7 @@ async function runInteractive(options: AgentOptions = {}) {
       if (trimmed === '') { ask(); return; }
 
       updateStatus('thinking', 'Thinking...');
+      process.stdout.write(`  ${c.yellow}🟡 thinking...${c.reset}\n`);
       let started = false;
       let responseText = '';
 
@@ -478,8 +364,10 @@ async function runInteractive(options: AgentOptions = {}) {
         }
         
         updateStatus('idle', 'Ready');
+        printStatusBar();
       } catch (err) {
         updateStatus('error', 'Error');
+        printStatusBar();
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}`);
       }
