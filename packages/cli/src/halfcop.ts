@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.26');
+  .version('1.0.27');
 
 interface AgentOptions {
   model?: string;
@@ -364,170 +364,62 @@ async function runInteractive(options: AgentOptions = {}) {
   const agentRef: { current: AgentLoop } = { current: agent };
 
   let isProcessing = false;
-  let interruptFlag = false;
 
-  // ------- Raw mode keypress input handling -------
+  // ------- 标准 readline 输入 -------
 
-  readline.emitKeypressEvents(process.stdin);
-  if (process.stdin.isTTY) process.stdin.setRawMode(true);
-  process.stdin.resume();
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
 
   const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
-  const showPrompt = () => {
-    process.stdout.write(PROMPT);
+  const ask = () => {
+    rl.question(PROMPT, async (input) => {
+      if (isProcessing) return;
+      const trimmed = input.trim();
+
+      if (!trimmed) { ask(); return; }
+
+      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+        console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`);
+        rl.close();
+        return;
+      }
+
+      if (trimmed.startsWith('/')) {
+        const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config);
+        if (result?.newModel) currentModel = result.newModel;
+        if (result?.newProvider) currentProvider = result.newProvider;
+        ask();
+        return;
+      }
+
+      await processInput(trimmed);
+      ask();
+    });
   };
-
-  let lineBuffer = '';
-  let pasteContent = '';
-  let appendBuffer = '';
-  let inPasteMode = false;       // true = 正在粘贴或已粘贴等待提交
-  let pasteBuffering = false;    // true = 粘贴还在收集中（未超时）
-  let pasteEndTimer: NodeJS.Timeout | null = null;
-  let lastKeyTime = 0;
-  let rapidKeyCount = 0;
-
-  // 在同一行显示 ❯ 📋 +X lines + 追加文字
-  function redrawPasteLine() {
-    const lineCount = pasteContent.split('\n').length;
-    const ts = `  ${c.green}${c.bold}❯${c.reset} ${c.gray}📋 +${lineCount} lines${c.reset} ${appendBuffer}`;
-    process.stdout.write('\r\x1b[K' + ts);
-  }
-
-  // 进入粘贴等待模式
-  function enterPasteMode(initial: string) {
-    inPasteMode = true;
-    pasteBuffering = true;
-    pasteContent = initial;
-    appendBuffer = '';
-    rapidKeyCount = 0;
-    process.stdout.write('\r\x1b[K');
-    resetPasteTimer();
-  }
-
-  function resetPasteTimer() {
-    if (pasteEndTimer) clearTimeout(pasteEndTimer);
-    pasteEndTimer = setTimeout(() => {
-      if (!inPasteMode) return;
-      pasteBuffering = false;
-      pasteEndTimer = null;
-      redrawPasteLine();
-    }, 400);
-  }
-
-  process.stdin.on('keypress', (str: string | undefined, key: readline.Key) => {
-    if (key.ctrl && key.name === 'c') process.exit();
-
-    if (isProcessing) {
-      if (key.name === 'escape') interruptFlag = true;
-      return;
-    }
-
-    const now = Date.now();
-    const gap = now - lastKeyTime;
-    lastKeyTime = now;
-
-    if (gap < 15) rapidKeyCount++;
-    else if (gap > 500) rapidKeyCount = 0;
-
-    // ====== ENTER ======
-    if (key.name === 'return') {
-      if (inPasteMode && pasteBuffering) {
-        // 粘贴收集中：\n 是粘贴内容
-        pasteContent += '\n';
-        resetPasteTimer();
-        return;
-      }
-      if (inPasteMode) {
-        // 粘贴完成，提交
-        inPasteMode = false;
-        pasteBuffering = false;
-        if (pasteEndTimer) { clearTimeout(pasteEndTimer); pasteEndTimer = null; }
-        let input = pasteContent;
-        if (appendBuffer.trim()) input += ' ' + appendBuffer;
-        pasteContent = '';
-        appendBuffer = '';
-        process.stdout.write('\n');
-        processInput(input);
-        return;
-      }
-      if (rapidKeyCount > 6) {
-        // 快速连击中的 \n → 粘贴内容
-        enterPasteMode(lineBuffer + '\n');
-        lineBuffer = '';
-        return;
-      }
-      // 正常提交
-      process.stdout.write('\n');
-      const input = lineBuffer;
-      lineBuffer = '';
-      if (input.trim()) processInput(input);
-      else showPrompt();
-      return;
-    }
-
-    // ====== BACKSPACE ======
-    if (key.name === 'backspace') {
-      if (pasteBuffering) return; // 收集中不能编辑
-      if (inPasteMode) {
-        if (appendBuffer.length > 0) {
-          appendBuffer = appendBuffer.slice(0, -1);
-          redrawPasteLine();
-        }
-      } else if (lineBuffer.length > 0) {
-        lineBuffer = lineBuffer.slice(0, -1);
-        process.stdout.write('\b \b');
-      }
-      return;
-    }
-
-    // ====== 字符 ======
-    if (!str) return;
-
-    if (pasteBuffering) {
-      pasteContent += str;
-      resetPasteTimer();
-    } else if (inPasteMode) {
-      // 粘贴已完成，用户追加文字
-      appendBuffer += str;
-      redrawPasteLine();
-    } else if (rapidKeyCount > 6 || (gap < 20 && lineBuffer.length > 0)) {
-      enterPasteMode(lineBuffer + str);
-      lineBuffer = '';
-    } else {
-      lineBuffer += str;
-      process.stdout.write(str);
-    }
-  });
 
   // ------- Agent processing -------
 
   const processInput = async (input: string) => {
     isProcessing = true;
-    interruptFlag = false;
     const trimmed = input.trim();
 
-    if (!trimmed) {
-      isProcessing = false;
-      showPrompt();
-      return;
-    }
+    if (!trimmed) { isProcessing = false; return; }
 
-    if (trimmed.startsWith('/')) {
-      const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config);
-      if (result?.newModel) currentModel = result.newModel;
-      if (result?.newProvider) currentProvider = result.newProvider;
-      isProcessing = false;
-      showPrompt();
-      return;
+    // ESC 中断
+    let interrupted = false;
+    const origRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
     }
+    const onData = (chunk: Buffer) => {
+      if (chunk[0] === 0x1b) interrupted = true;
+    };
+    process.stdin.on('data', onData);
 
-    if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
-      console.log(`\n  ${c.yellow}Bye! 👋${c.reset}`);
-      process.exit(0);
-    }
-
-    // Thinking animation
     const thinking = createThinkingAnimation();
     thinking.start();
 
@@ -538,8 +430,7 @@ async function runInteractive(options: AgentOptions = {}) {
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
-        if (interruptFlag) {
-          interruptFlag = false;
+        if (interrupted) {
           loopEnded = true;
           thinking.stop();
           process.stdout.write(`\n    ${c.yellow}⏹ Interrupted${c.reset}\n`);
@@ -610,14 +501,14 @@ async function runInteractive(options: AgentOptions = {}) {
       thinking.stop();
       const msg = err instanceof Error ? err.message : String(err);
       process.stdout.write(`\n    ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}\n`);
-      atLineStart = true;
     } finally {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY) process.stdin.setRawMode(origRaw ?? false);
       isProcessing = false;
-      showPrompt();
     }
   };
 
-  showPrompt();
+  ask();
 }
 
 interface HandleCommandResult {
