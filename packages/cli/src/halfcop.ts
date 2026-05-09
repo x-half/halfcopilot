@@ -102,8 +102,14 @@ function printHeader() {
   console.log('');
   console.log(`  ${c.cyan}${c.bold}╭${'─'.repeat(62)}╮${c.reset}`);
   console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(19)}${c.white}${c.bold}H A L F   C O P I L O T${c.reset}${c.cyan}${' '.repeat(20)}│${c.reset}`);
-  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(12)}${c.white}Multi-model Agent Framework CLI${c.reset}${c.cyan}${' '.repeat(17)}│${c.reset}`);
+  // Banner: H A L F C O P I L O T (19 chars), centered in 62-char box
+  const banner = 'H A L F   C O P I L O T';
+  const bannerPad = Math.floor((62 - banner.length) / 2);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(bannerPad)}${c.white}${c.bold}${banner}${c.reset}${c.cyan}${' '.repeat(62 - bannerPad - banner.length)}│${c.reset}`);
+  // Subtitle: 32 chars, pad 15 each side
+  const subtitle = 'Multi-model Agent Framework CLI';
+  const subPad = Math.floor((62 - subtitle.length) / 2);
+  console.log(`  ${c.cyan}${c.bold}│${' '.repeat(subPad)}${c.white}${subtitle}${c.reset}${c.cyan}${' '.repeat(62 - subPad - subtitle.length)}│${c.reset}`);
   console.log(`  ${c.cyan}${c.bold}│${' '.repeat(62)}│${c.reset}`);
   console.log(`  ${c.cyan}${c.bold}╰${'─'.repeat(62)}╯${c.reset}`);
   console.log('');
@@ -121,6 +127,36 @@ function printUserMessage(message: string) {
   console.log(`\n  ${c.green}${box.tl}─── You ${box.h.repeat(Math.max(0, lineLen - 12))}${box.tr}${c.reset}`);
   console.log(`  ${c.green}${box.v}${c.reset} ${c.green}${c.bold}${display}${c.reset}${' '.repeat(Math.max(0, 60 - display.length))} ${c.green}${box.v}${c.reset}`);
   console.log(`  ${c.green}${box.bl}───${box.h.repeat(Math.max(0, lineLen - 1))}${box.br}${c.reset}\n`);
+}
+
+// Strip basic markdown syntax for clean terminal display
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')     // **bold** -> text
+    .replace(/\*([^*]+)\*/g, '$1')           // *italic* -> text
+    .replace(/`([^`]+)`/g, '$1')               // `code` -> text
+    .replace(/^#+\s+(.*)$/gm, '$1')           // # headings -> plain
+    .replace(/^>\s+(.*)$/gm, '  ▸ $1')        // > blockquote
+    .replace(/^-\s+/gm, '  • ')               // - list items
+    .replace(/\*\*([^*]+)\*\*/g, '$1');    // already handled above, but double-check
+}
+
+function printMarkdownBox(text: string) {
+  // Strip markdown first
+  const clean = stripMarkdown(text);
+  const displayLines = clean.split('\n').filter(l => l.trim() !== '');
+  if (displayLines.length === 0) return;
+
+  const maxLen = Math.min(Math.max(...displayLines.map(l => l.length)), 64);
+  const top = `  ${c.blue}${box.tl}─── HalfCopilot ${box.h.repeat(Math.max(0, maxLen - 21))}${box.tr}${c.reset}`;
+
+  console.log('\n' + top);
+  for (const line of displayLines) {
+    const padding = ' '.repeat(Math.max(0, maxLen - line.length));
+    console.log(`  ${c.blue}${box.v}${c.reset} ${c.white}${line}${c.reset}${padding} ${c.blue}${box.v}${c.reset}`);
+  }
+  const bot = `  ${c.blue}${box.bl}───${box.h.repeat(maxLen)}${box.br}${c.reset}`;
+  console.log(bot + '\n');
 }
 
 function printAssistantStart() {
@@ -293,10 +329,30 @@ async function runInteractive(options: AgentOptions = {}) {
   // Agent ref that can be swapped (for provider/model switching)
   const agentRef: { current: AgentLoop } = { current: agent };
 
+  // Blinking cursor animation
+  let cursorInterval: NodeJS.Timeout | null = null;
+  const cursorOn = () => {
+    process.stdout.write(`\r${c.green}${c.bold}  ❯ ${c.reset} `);
+  };
+  const cursorOff = () => {
+    process.stdout.write(`\r${c.green}${c.bold}  █ ${c.reset} `);
+  };
+
   const ask = () => {
-    rl.question(`\n${c.green}${c.bold}  ❯ ${c.reset}`, async (input) => {
-      const trimmed = input.trim();
-      
+    cursorOn();
+    let tick = false;
+    cursorInterval = setInterval(() => {
+      if (tick) cursorOn(); else cursorOff();
+      tick = !tick;
+    }, 500);
+
+    rl.question('', async (input) => {
+      if (cursorInterval) { clearInterval(cursorInterval); cursorInterval = null; }
+      // Erase the blinking cursor line
+      process.stdout.write(`\r${' '.repeat(60)}\r`);
+      const trimmed = (input || '').trim();
+
+      if (!trimmed || trimmed === '') { ask(); return; }
       if (trimmed.startsWith('/')) {
         const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config, rl);
         if (result?.newModel) {
@@ -317,54 +373,34 @@ async function runInteractive(options: AgentOptions = {}) {
       }
       if (trimmed === '') { ask(); return; }
 
-      updateStatus('thinking', 'Thinking...');
-      process.stdout.write(`  ${c.yellow}🟡 thinking...${c.reset}\n`);
-      let started = false;
+      // Print thinking indicator
+      process.stdout.write(`\n  ${c.yellow}🟡 thinking...${c.reset}\n\n`);
       let responseText = '';
 
       try {
         for await (const event of agentRef.current.run(trimmed)) {
           switch (event.type) {
             case 'text':
-              if (!started) {
-                process.stdout.write(`\n  ${c.blue}${c.bold}🤖${c.reset} `);
-                started = true;
-              }
               responseText += event.content ?? '';
-              process.stdout.write(event.content ?? '');
               break;
             case 'tool_use':
-              updateStatus('executing', `Running ${event.toolName}...`);
-              process.stdout.write(`\n  ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
+              process.stdout.write(`  ${c.cyan}🔧 running ${event.toolName}...${c.reset}\n`);
               break;
             case 'tool_result':
-              updateStatus('thinking', 'Thinking...');
+              process.stdout.write(`  ${c.gray}✓ done${c.reset}\n`);
               break;
             case 'error':
-              updateStatus('error', event.error?.message?.slice(0, 30) ?? 'Error');
-              console.log(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100)}${c.reset}`);
+              process.stdout.write(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100) ?? 'error'}${c.reset}\n\n`);
               break;
             case 'done':
-              updateStatus('completed', 'Done');
               break;
           }
         }
-        
-        // Print completed response in a box
-        if (started && responseText) {
-          const lines = responseText.split('\n');
-          const maxLen = Math.min(Math.max(...lines.map(l => l.length), 60), 70);
-          
-          console.log(`\n  ${c.blue}${box.tl}─── HalfCopilot ${box.h.repeat(Math.max(0, maxLen - 22))}${box.tr}${c.reset}`);
-          for (const line of lines) {
-            const padding = ' '.repeat(Math.max(0, maxLen - line.length));
-            console.log(`  ${c.blue}${box.v}${c.reset} ${c.white}${line}${c.reset}${padding} ${c.blue}${box.v}${c.reset}`);
-          }
-          console.log(`  ${c.blue}${box.bl}───${box.h.repeat(maxLen)}${box.br}${c.reset}\n`);
+
+        // Print response in a box with markdown stripped
+        if (responseText) {
+          printMarkdownBox(responseText);
         }
-        
-        updateStatus('idle', 'Ready');
-        printStatusBar();
       } catch (err) {
         updateStatus('error', 'Error');
         printStatusBar();
