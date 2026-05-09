@@ -61,6 +61,9 @@ const box = {
   mr: '┤',
 };
 
+// Agent status types
+type AgentStatus = 'idle' | 'thinking' | 'executing' | 'completed' | 'error';
+
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -94,20 +97,118 @@ function printBox(content: string, color: string = c.cyan, width: number = 50) {
   console.log(`${color}${box.bl}${box.h.repeat(maxLen + 2)}${box.br}${c.reset}`);
 }
 
+// ASCII art for HALF COPILOT using box-drawing characters
+// Each letter is 5 chars tall, 4 chars wide + 1 space = 5 chars
+const ASCII_H = [
+  "█       █ ",
+  "█       █ ",
+  "█████████ ",
+  "█       █ ",
+  "█       █ ",
+];
+
+const ASCII_A = [
+  " ███████  ",
+  "█       █ ",
+  "█████████ ",
+  "█       █ ",
+  "█       █ ",
+];
+
+const ASCII_L = [
+  "█        ",
+  "█        ",
+  "█        ",
+  "█        ",
+  "█████████ ",
+];
+
+const ASCII_F = [
+  "█████████ ",
+  "█        ",
+  "███████  ",
+  "█        ",
+  "█        ",
+];
+
+const ASCII_C = [
+  " ███████ ",
+  "█       █",
+  "█       █",
+  "█       █",
+  " ███████ ",
+];
+
+const ASCII_O = [
+  " ███████ ",
+  "█       █",
+  "█       █",
+  "█       █",
+  " ███████ ",
+];
+
+const ASCII_P = [
+  "█████████ ",
+  "█       █ ",
+  "█████████ ",
+  "█        ",
+  "█        ",
+];
+
+const ASCII_I = [
+  "███████",
+  "  ██  ",
+  "  ██  ",
+  "  ██  ",
+  "███████",
+];
+
+const ASCII_T = [
+  "███████████",
+  "    ██     ",
+  "    ██     ",
+  "    ██     ",
+  "    ██     ",
+];
+
 function printHeader() {
   console.log('');
-  console.log(`${c.cyan}${c.bold}  ╭─────────────────────────────────────────────────────╮${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ██╗  ██╗ █████╗ ██╗     ██████╗ ██████╗ ██████╗  │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ██║  ██║██╔══██╗██║    ██╔════╝██╔═══██╗██╔══██╗ │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ███████║███████║██║    ██║     ██║   ██║██████╔╝ │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ██╔══██║██╔══██║██║    ██║     ██║   ██║██╔═══╝  │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ██║  ██║██║  ██║██║    ╚██████╗╚██████╔╝██║      │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═════╝ ╚═════╝ ╚═╝      │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │         Multi-model Agent Framework CLI              │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
-  console.log(`${c.cyan}${c.bold}  ╰─────────────────────────────────────────────────────╯${c.reset}`);
+  const lines: string[] = ['', '', '', '', '', ''];
+  
+  for (let row = 0; row < 6; row++) {
+    let line = `  ${c.cyan}${c.bold}`;
+    
+    if (row === 0) line += '╭' + '─'.repeat(62) + '╮';
+    else if (row === 5) line += '╰' + '─'.repeat(62) + '╯';
+    else if (row === 1 || row === 4) line += '│' + ' '.repeat(62) + '│';
+    else if (row === 2) {
+      // ASCII art line
+      const chars = [
+        ASCII_H[row - 2] ?? '',
+        ASCII_A[row - 2] ?? '',
+        ASCII_L[row - 2] ?? '',
+        ASCII_F[row - 2] ?? '',
+        '  ',
+        ASCII_C[row - 2] ?? '',
+        ASCII_O[row - 2] ?? '',
+        ASCII_P[row - 2] ?? '',
+        ASCII_I[row - 2] ?? '',
+        ASCII_L[row - 2] ?? '',
+        ASCII_O[row - 2] ?? '',
+        ASCII_T[row - 2] ?? '',
+      ];
+      const artLine = chars.join('');
+      const padding = 62 - artLine.length;
+      line += '│' + artLine + ' '.repeat(Math.max(0, padding)) + '│';
+    } else if (row === 3) {
+      const subtitle = 'Multi-model Agent Framework CLI';
+      const padding = 62 - subtitle.length;
+      line += '│' + ' '.repeat(Math.floor(padding / 2)) + c.white + subtitle + c.cyan + ' '.repeat(Math.ceil(padding / 2)) + '│';
+    }
+    
+    line += c.reset;
+    console.log(line);
+  }
   console.log('');
 }
 
@@ -116,7 +217,13 @@ function printInfo(label: string, value: string) {
 }
 
 function printUserMessage(message: string) {
-  console.log(`\n  ${c.green}${c.bold}❯ ${c.reset}${message.substring(0, 100)}${message.length > 100 ? '...' : ''}\n`);
+  const maxLen = Math.min(message.length, 60);
+  const display = message.substring(0, maxLen) + (message.length > maxLen ? '...' : '');
+  const lineLen = display.length + 4;
+  
+  console.log(`\n  ${c.green}${box.tl}─── You ${box.h.repeat(Math.max(0, lineLen - 12))}${box.tr}${c.reset}`);
+  console.log(`  ${c.green}${box.v}${c.reset} ${c.green}${c.bold}${display}${c.reset}${' '.repeat(Math.max(0, 60 - display.length))} ${c.green}${box.v}${c.reset}`);
+  console.log(`  ${c.green}${box.bl}───${box.h.repeat(Math.max(0, lineLen - 1))}${box.br}${c.reset}\n`);
 }
 
 function printAssistantStart() {
@@ -133,10 +240,69 @@ function printAssistantText(text: string) {
 
 function printThinking() {
   const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-  return {
-    frame: (i: number) => process.stdout.write(`\r  ${c.cyan}${frames[i % frames.length]} ${c.dim}Thinking...${c.reset}   `),
-    clear: () => process.stdout.write('\r' + ' '.repeat(30) + '\r'),
+  let i = 0;
+  let interval: NodeJS.Timeout | null = null;
+  
+  const start = () => {
+    interval = setInterval(() => {
+      process.stdout.write(`\r  ${c.cyan}${frames[i % frames.length]} ${c.dim}Thinking...${c.reset}   `);
+      i++;
+    }, 80);
   };
+  
+  const stop = () => {
+    if (interval) clearInterval(interval);
+    process.stdout.write('\r' + ' '.repeat(30) + '\r');
+  };
+  
+  return { start, stop };
+}
+
+// Status bar rendering
+let currentStatus: AgentStatus = 'idle';
+let currentProvider = '';
+let currentModel = '';
+let currentMode = 'auto';
+let statusDescription = 'Ready';
+
+const statusColors: Record<AgentStatus, string> = {
+  idle: c.gray,
+  thinking: c.yellow,
+  executing: c.blue,
+  completed: c.green,
+  error: c.red,
+};
+
+const statusEmoji: Record<AgentStatus, string> = {
+  idle: '⚪',
+  thinking: '🟡',
+  executing: '🔵',
+  completed: '🟢',
+  error: '🔴',
+};
+
+function showStatusBar() {
+  const left = `${c.gray}${currentProvider}/${currentModel}`;
+  const center = `${c.cyan}[${currentMode.toUpperCase()}]`;
+  const right = `${statusColors[currentStatus]}${statusEmoji[currentStatus]} ${statusDescription}`;
+  
+  // Pad each section
+  const totalWidth = 70;
+  const leftPad = '  ';
+  const rightPad = '  ';
+  
+  process.stdout.write(`\x1b[999B\r\x1b[K${leftPad}${left}${' '.repeat(Math.max(1, 25 - left.length))}${center}${' '.repeat(Math.max(1, 15 - center.length))}${rightPad}${right}${c.reset}\n`);
+  process.stdout.write(`\x1b[999A`); // Move back up
+}
+
+function hideStatusBar() {
+  process.stdout.write(`\x1b[999B\r\x1b[K\x1b[2J\x1b[H`);
+}
+
+function updateStatus(status: AgentStatus, desc?: string) {
+  currentStatus = status;
+  if (desc) statusDescription = desc;
+  showStatusBar();
 }
 
 function checkConfig(config: any): boolean {
@@ -194,7 +360,6 @@ function createAgent(options: AgentOptions = {}) {
   });
 
   const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
-    // This should rarely be called now due to auto-approval
     return new Promise((resolve) => {
       rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
         resolve(answer.toLowerCase().trim() === 'y');
@@ -215,11 +380,17 @@ function createAgent(options: AgentOptions = {}) {
     mode: (options.mode as any) ?? 'auto',
   });
 
-  return { agent, providerName, config, skillRegistry, modelName, rl };
+  return { agent, providerName, config, skillRegistry, modelName, rl, providerRegistry };
 }
 
 async function runInteractive(options: AgentOptions = {}) {
-  const { agent, providerName, config, skillRegistry, modelName, rl } = createAgent(options);
+  const { agent, providerName, config, skillRegistry, modelName, rl, providerRegistry } = createAgent(options);
+
+  // Initialize status bar info
+  currentProvider = providerName;
+  currentModel = modelName;
+  currentMode = options.mode ?? 'auto';
+  updateStatus('idle', 'Ready');
 
   printHeader();
   printInfo('Provider', providerName);
@@ -227,24 +398,25 @@ async function runInteractive(options: AgentOptions = {}) {
   printInfo('Mode', options.mode ?? 'auto');
   console.log('');
   console.log(`  ${c.dim}Type to chat. /help for commands. "exit" to quit.${c.reset}`);
-
-  // Status line at the very bottom - rendered via ANSI
-  const showStatus = (text: string) => {
-    process.stdout.write(`\x1b[999B\r\x1b[K  ${c.dim}${text}${c.reset}`);
-  };
-  const hideStatus = () => {
-    process.stdout.write(`\x1b[999B\r\x1b[K`);
-  };
-
-  // Reserve bottom line for status
   console.log('');
+
+  // Agent ref that can be swapped (for provider/model switching)
+  const agentRef: { current: AgentLoop } = { current: agent };
 
   const ask = () => {
     rl.question(`\n${c.green}${c.bold}  ❯ ${c.reset}`, async (input) => {
       const trimmed = input.trim();
       
       if (trimmed.startsWith('/')) {
-        handleCommand(trimmed, options, modelName, providerName);
+        const result = await handleCommand(trimmed, options, modelName, providerName, agentRef, providerRegistry, config, rl);
+        if (result?.newModel) {
+          currentModel = result.newModel;
+          updateStatus('idle', 'Ready');
+        }
+        if (result?.newProvider) {
+          currentProvider = result.newProvider;
+          updateStatus('idle', 'Ready');
+        }
         ask();
         return;
       }
@@ -253,39 +425,54 @@ async function runInteractive(options: AgentOptions = {}) {
       }
       if (trimmed === '') { ask(); return; }
 
-      showStatus('⏳ Thinking...');
+      updateStatus('thinking', 'Thinking...');
       let started = false;
+      let responseText = '';
 
       try {
-        for await (const event of agent.run(trimmed)) {
+        for await (const event of agentRef.current.run(trimmed)) {
           switch (event.type) {
             case 'text':
               if (!started) {
-                hideStatus();
                 process.stdout.write(`\n  ${c.blue}${c.bold}🤖${c.reset} `);
                 started = true;
               }
+              responseText += event.content ?? '';
               process.stdout.write(event.content ?? '');
               break;
             case 'tool_use':
-              hideStatus();
-              process.stdout.write(`\n  ${c.dim}🔧 ${event.toolName}...${c.reset}`);
+              updateStatus('executing', `Running ${event.toolName}...`);
+              process.stdout.write(`\n  ${c.cyan}🔧 ${event.toolName}...${c.reset}`);
               break;
             case 'tool_result':
-              showStatus('⏳ Thinking...');
+              updateStatus('thinking', 'Thinking...');
               break;
             case 'error':
-              hideStatus();
+              updateStatus('error', event.error?.message?.slice(0, 30) ?? 'Error');
               console.log(`\n  ${c.red}✗ ${event.error?.message?.slice(0, 100)}${c.reset}`);
               break;
             case 'done':
-              if (started) console.log('\n');
-              hideStatus();
+              updateStatus('completed', 'Done');
               break;
           }
         }
+        
+        // Print completed response in a box
+        if (started && responseText) {
+          const lines = responseText.split('\n');
+          const maxLen = Math.min(Math.max(...lines.map(l => l.length), 60), 70);
+          
+          console.log(`\n  ${c.blue}${box.tl}─── HalfCopilot ${box.h.repeat(Math.max(0, maxLen - 22))}${box.tr}${c.reset}`);
+          for (const line of lines) {
+            const padding = ' '.repeat(Math.max(0, maxLen - line.length));
+            console.log(`  ${c.blue}${box.v}${c.reset} ${c.white}${line}${c.reset}${padding} ${c.blue}${box.v}${c.reset}`);
+          }
+          console.log(`  ${c.blue}${box.bl}───${box.h.repeat(maxLen)}${box.br}${c.reset}\n`);
+        }
+        
+        updateStatus('idle', 'Ready');
       } catch (err) {
-        hideStatus();
+        updateStatus('error', 'Error');
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`\n  ${c.red}✗ ${msg.replace(/^400 /,'').replace(/^429 /,'Quota exhausted — ').slice(0, 120)}${c.reset}`);
       }
@@ -297,40 +484,154 @@ async function runInteractive(options: AgentOptions = {}) {
   ask();
 }
 
-  function handleCommand(cmd: string, opts: AgentOptions, currentModel: string, currentProvider: string) {
-    const parts = cmd.split(' ');
-    const command = parts[0].toLowerCase();
-    const arg = parts.slice(1).join(' ');
+interface HandleCommandResult {
+  newModel?: string;
+  newProvider?: string;
+}
 
-    switch (command) {
-      case '/model':
-        if (arg) {
-          opts.model = arg;
+async function handleCommand(
+  cmd: string, 
+  opts: AgentOptions, 
+  currentModel: string, 
+  currentProvider: string,
+  agentRef: { current: AgentLoop },
+  providerRegistry: ProviderRegistry,
+  config: any,
+  rl: readline.Interface
+): Promise<HandleCommandResult | void> {
+  const parts = cmd.split(' ');
+  const command = parts[0].toLowerCase();
+  const arg = parts.slice(1).join(' ');
+
+  switch (command) {
+    case '/model':
+      if (arg) {
+        opts.model = arg;
+        updateStatus('thinking', `Switching to ${arg}...`);
+        try {
+          // Re-create agent with new model
+          const providerName = opts.provider ?? config.defaultProvider ?? 'xiaomi';
+          const provider = providerRegistry.get(providerName);
+          
+          const toolRegistry = new ToolRegistry();
+          const builtinTools = createBuiltinTools();
+          builtinTools.forEach(t => toolRegistry.register(t));
+
+          const permissions = new PermissionChecker({
+            autoApproveSafe: config.permissions.autoApproveSafe,
+            allow: config.permissions.allow,
+            deny: config.permissions.deny,
+          });
+
+          const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
+            return new Promise((resolve) => {
+              rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
+                resolve(answer.toLowerCase().trim() === 'y');
+              });
+            });
+          });
+
+          const newAgent = new AgentLoop({
+            provider,
+            providerName,
+            model: arg,
+            tools: toolRegistry,
+            executor,
+            permissions,
+            maxTurns: config.maxTurns,
+            mode: (opts.mode as any) ?? 'auto',
+          });
+          
+          agentRef.current = newAgent;
           console.log(`  ${c.green}✓ Model: ${arg}${c.reset}`);
-        } else {
-          console.log(`  ${c.yellow}Model: ${currentModel}${c.reset}`);
+          return { newModel: arg };
+        } catch (err) {
+          console.log(`  ${c.red}✗ Model not found: ${arg}${c.reset}`);
         }
-        break;
-      case '/provider':
-        if (arg) {
-          opts.provider = arg;
+      } else {
+        console.log(`  ${c.yellow}Model: ${currentModel}${c.reset}`);
+      }
+      break;
+      
+    case '/provider':
+      if (arg) {
+        opts.provider = arg;
+        updateStatus('thinking', `Switching to ${arg}...`);
+        try {
+          const newProvider = providerRegistry.get(arg);
+          
+          const toolRegistry = new ToolRegistry();
+          const builtinTools = createBuiltinTools();
+          builtinTools.forEach(t => toolRegistry.register(t));
+
+          const permissions = new PermissionChecker({
+            autoApproveSafe: config.permissions.autoApproveSafe,
+            allow: config.permissions.allow,
+            deny: config.permissions.deny,
+          });
+
+          const executor = new ToolExecutor(toolRegistry, permissions, async (toolName, input) => {
+            return new Promise((resolve) => {
+              rl.question(`${c.yellow}  ⚠️  Allow ${toolName}? (y/n): ${c.reset}`, (answer) => {
+                resolve(answer.toLowerCase().trim() === 'y');
+              });
+            });
+          });
+
+          const newAgent = new AgentLoop({
+            provider: newProvider,
+            providerName: arg,
+            model: opts.model ?? config.defaultModel ?? 'mimo-v2.5-pro',
+            tools: toolRegistry,
+            executor,
+            permissions,
+            maxTurns: config.maxTurns,
+            mode: (opts.mode as any) ?? 'auto',
+          });
+          
+          agentRef.current = newAgent;
           console.log(`  ${c.green}✓ Provider: ${arg}${c.reset}`);
-        } else {
-          console.log(`  ${c.yellow}Provider: ${currentProvider}${c.reset}`);
+          return { newProvider: arg };
+        } catch (err) {
+          console.log(`  ${c.red}✗ Provider not found: ${arg}${c.reset}`);
         }
-        break;
-      case '/clear':
-        console.clear();
-        printHeader();
-        break;
-      case '/help':
-        console.log(`\n  ${c.cyan}Commands:${c.reset}`);
-        console.log(`  ${c.white}/model <name> /provider <name> /clear /help /exit${c.reset}\n`);
-        break;
-      default:
-        console.log(`  ${c.red}Unknown: ${command}${c.reset}`);
-    }
+      } else {
+        console.log(`  ${c.yellow}Provider: ${currentProvider}${c.reset}`);
+      }
+      break;
+      
+    case '/mode':
+      if (arg && ['plan', 'act', 'auto', 'review'].includes(arg)) {
+        opts.mode = arg;
+        agentRef.current.setMode(arg as any);
+        console.log(`  ${c.green}✓ Mode: ${arg}${c.reset}`);
+        currentMode = arg;
+        updateStatus('idle', `Mode: ${arg}`);
+      } else {
+        console.log(`  ${c.yellow}Mode: ${currentMode}${c.reset}`);
+        console.log(`  ${c.dim}Options: plan, act, auto, review${c.reset}`);
+      }
+      break;
+      
+    case '/clear':
+      console.clear();
+      printHeader();
+      break;
+      
+    case '/help':
+      console.log(`\n  ${c.cyan}Commands:${c.reset}`);
+      console.log(`  ${c.white}/model <name>${c.reset}   - Switch model`);
+      console.log(`  ${c.white}/provider <name>${c.reset} - Switch provider`);
+      console.log(`  ${c.white}/mode <name>${c.reset}    - Set mode (plan/act/auto/review)`);
+      console.log(`  ${c.white}/clear${c.reset}           - Clear screen`);
+      console.log(`  ${c.white}/help${c.reset}           - Show this help`);
+      console.log(`  ${c.white}/exit${c.reset}           - Quit\n`);
+      break;
+      
+    default:
+      console.log(`  ${c.red}Unknown: ${command}${c.reset}`);
   }
+}
 
 async function runSingle(prompt: string, options: AgentOptions = {}) {
   const { agent, rl } = createAgent(options);
@@ -343,20 +644,19 @@ async function runSingle(prompt: string, options: AgentOptions = {}) {
       switch (event.type) {
         case 'text':
           if (isFirstChunk) {
-            thinking.clear();
+            thinking.stop();
             isFirstChunk = false;
           }
           process.stdout.write(event.content ?? '');
           break;
         case 'tool_use':
         case 'tool_result':
-          // Hide tool calls
           break;
       }
     }
     console.log('');
   } catch (err) {
-    thinking.clear();
+    thinking.stop();
     console.error(`Error: ${err instanceof Error ? err.message : err}`);
   }
   
@@ -458,11 +758,11 @@ program
   .description('Interactive setup — configure API keys for model providers')
   .action(async () => {
     const fs = await import('fs');
-    const path = await import('path');
+    const pathModule = await import('path');
     const os = await import('os');
     
-    const configDir = path.join(os.homedir(), '.halfcopilot');
-    const configFile = path.join(configDir, 'settings.json');
+    const configDir = pathModule.join(os.homedir(), '.halfcopilot');
+    const configFile = pathModule.join(configDir, 'settings.json');
     
     // Load existing or create default
     let config: any = {};
@@ -474,16 +774,25 @@ program
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const ask = (q: string) => new Promise<string>(resolve => rl.question(q, resolve));
     
-    // Provider templates
+    // Print header
+    console.log('');
+    console.log(`${c.cyan}${c.bold}  ╭─────────────────────────────────────────────────────╮${c.reset}`);
+    console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
+    console.log(`${c.cyan}${c.bold}  │           ⚙️  HalfCopilot Setup                     │${c.reset}`);
+    console.log(`${c.cyan}${c.bold}  │                                                     │${c.reset}`);
+    console.log(`${c.cyan}${c.bold}  ╰─────────────────────────────────────────────────────╯${c.reset}`);
+    console.log('');
+    
+    // Provider templates - updated with accurate endpoints
     const providers: Array<{
       name: string; label: string; baseUrl: string; models: string[]; desc: string;
     }> = [
-      { name: 'minimax', label: 'MiniMax', desc: 'M2.7 / M2.5 — OpenAI 兼容',
+      { name: 'minimax', label: 'MiniMax', desc: 'M2.7 / M2.5 — 海螺AI同款',
         baseUrl: 'https://api.minimaxi.com/v1', models: ['MiniMax-M2.7', 'MiniMax-M2.5'] },
       { name: 'xiaomi', label: '小米 MiMo', desc: 'Token Plan API',
         baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'] },
-      { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，国产大模型',
-        baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-coder'] },
+      { name: 'deepseek', label: 'DeepSeek', desc: '高性价比，深度推理',
+        baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
       { name: 'qwen', label: '通义千问 Qwen', desc: '阿里云出品',
         baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-turbo', 'qwen-plus'] },
       { name: 'openai', label: 'OpenAI', desc: 'GPT-4o / GPT-4o-mini',
@@ -492,13 +801,8 @@ program
         baseUrl: '', models: ['claude-sonnet-4-20250514'] },
     ];
     
-    console.log('');
-    console.log(`  ${c.cyan}${c.bold}⚙️  HalfCopilot Setup${c.reset}`);
-    console.log('');
     console.log(`  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`);
     console.log('');
-    
-    // Pick default provider first
     console.log(`  ${c.cyan}${c.bold}📦 可用厂商:${c.reset}`);
     console.log('');
     
@@ -510,22 +814,25 @@ program
     console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
     console.log('');
     
-    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-6): ${c.reset}`);
-    const idx = parseInt(choice.trim());
+    let selectedIdx = -1;
     
-    if (isNaN(idx) || idx < 0 || idx > 6) {
+    // Keyboard navigation (basic, using enter)
+    const choice = await ask(`  ${c.green}选择你要配置的厂商 (0-${providers.length}): ${c.reset}`);
+    selectedIdx = parseInt(choice.trim()) - 1;
+    
+    if (isNaN(selectedIdx) || selectedIdx < -1 || selectedIdx >= providers.length) {
       console.log(`  ${c.red}无效选择${c.reset}`);
       rl.close();
       return;
     }
     
-    if (idx === 0) {
+    if (selectedIdx === -1) {
       console.log(`  ${c.yellow}配置完成！${c.reset}`);
       rl.close();
       return;
     }
     
-    const selected = providers[idx - 1];
+    const selected = providers[selectedIdx];
     
     console.log('');
     console.log(`  ${c.cyan}配置 ${selected.label}${c.reset}`);
@@ -533,10 +840,19 @@ program
     let apiKey: string;
     
     if (selected.name === 'xiaomi') {
-      // Show quick config presets
       console.log('');
       console.log(`  ${c.dim}小米 Token Plan API Key 示例格式:${c.reset}`);
       console.log(`  ${c.dim}tp-xxxxxxxxxx...${c.reset}`);
+    }
+    
+    if (selected.name === 'minimax') {
+      console.log('');
+      console.log(`  ${c.dim}MiniMax API Key (来自 minimaxi.com):${c.reset}`);
+    }
+    
+    if (selected.name === 'deepseek') {
+      console.log('');
+      console.log(`  ${c.dim}DeepSeek API Key (来自 api.deepseek.com):${c.reset}`);
     }
     
     apiKey = await ask(`  ${c.green}API Key: ${c.reset}`);
@@ -547,10 +863,22 @@ program
       return;
     }
     
-    // Build models object
-    const models: Record<string, { contextWindow: number; maxOutput: number }> = {};
-    for (const m of selected.models) {
-      models[m] = { contextWindow: 128000, maxOutput: 8192 };
+    // Build models object with proper context windows
+    const modelConfigs: Record<string, { contextWindow: number; maxOutput: number }> = {};
+    
+    if (selected.name === 'minimax') {
+      modelConfigs['MiniMax-M2.7'] = { contextWindow: 128000, maxOutput: 16384 };
+      modelConfigs['MiniMax-M2.5'] = { contextWindow: 128000, maxOutput: 16384 };
+    } else if (selected.name === 'deepseek') {
+      modelConfigs['deepseek-chat'] = { contextWindow: 64000, maxOutput: 8192 };
+      modelConfigs['deepseek-reasoner'] = { contextWindow: 64000, maxOutput: 8192 };
+    } else if (selected.name === 'xiaomi') {
+      modelConfigs['mimo-v2.5-pro'] = { contextWindow: 128000, maxOutput: 16384 };
+      modelConfigs['mimo-v2.5'] = { contextWindow: 128000, maxOutput: 16384 };
+    } else {
+      for (const m of selected.models) {
+        modelConfigs[m] = { contextWindow: 128000, maxOutput: 8192 };
+      }
     }
     
     // Save provider config
@@ -558,7 +886,7 @@ program
       type: selected.name === 'anthropic' ? 'anthropic' : 'openai-compatible',
       ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
       apiKey,
-      models,
+      models: modelConfigs,
     };
     
     // Set as default if no default set
@@ -574,7 +902,7 @@ program
     console.log('');
     console.log(`  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`);
     console.log(`  ${c.dim}配置文件: ${configFile}${c.reset}`);
-    console.log(`  ${c.dim}模型: ${selected.models.join(', ')}${c.reset}`);
+    console.log(`  ${c.dim}模型: ${Object.keys(modelConfigs).join(', ')}${c.reset}`);
     
     if (config.defaultProvider === selected.name) {
       console.log(`  ${c.green}已设为默认厂商${c.reset}`);

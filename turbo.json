@@ -3,7 +3,10 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "inputs": ["src/**", "tsconfig.json"],
+      "outputs": ["dist/**"],
+      "cache": false,
+      "env": ["NPM_TOKEN", "GITHUB_TOKEN"]
     },
     "dev": {
       "cache": false,
