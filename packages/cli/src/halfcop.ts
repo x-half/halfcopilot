@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name('halfcop')
   .description('HalfCopilot — Multi-model Agent Framework CLI')
-  .version('1.0.22');
+  .version('1.0.23');
 
 interface AgentOptions {
   model?: string;
@@ -485,9 +485,10 @@ async function runInteractive(options: AgentOptions = {}) {
   rl.on('line', (line) => {
     if (isProcessing) return;
 
-    // If awaiting confirmation, the next Enter submits the paste
+    // If awaiting confirmation, the next Enter submits paste + any typed text
     if (awaitingConfirm) {
       awaitingConfirm = false;
+      pendingLines.push(line);
       const fullInput = pendingLines.join('\n');
       pendingLines = [];
       processInput(fullInput);
@@ -507,7 +508,7 @@ async function runInteractive(options: AgentOptions = {}) {
       } else {
         // Multiple lines - paste detected, wait for confirmation
         awaitingConfirm = true;
-        process.stdout.write(`  ${c.gray}📋 +${pendingLines.length} lines${c.reset}\n`);
+        process.stdout.write(`\r  ${c.gray}📋 +${pendingLines.length} lines${c.reset}\n`);
         showPrompt();
       }
     }, 200);
