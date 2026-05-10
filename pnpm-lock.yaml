@@ -34,7 +34,7 @@ importers:
         version: link:../core
       '@halfcopilot/mcp':
         specifier: file:../mcp
-        version: link:../mcp
+        version: file:packages/mcp(ws@8.20.0)(zod@3.25.76)
       '@halfcopilot/memory':
         specifier: file:../memory
         version: link:../memory
@@ -46,7 +46,7 @@ importers:
         version: link:../shared
       '@halfcopilot/skills':
         specifier: file:../skills
-        version: link:../skills
+        version: file:packages/skills(ws@8.20.0)(zod@3.25.76)
       '@halfcopilot/tools':
         specifier: file:../tools
         version: link:../tools
@@ -56,6 +56,9 @@ importers:
       ink:
         specifier: ^4.4.0
         version: 4.4.1(@types/react@18.3.28)(react@18.3.1)
+      marked:
+        specifier: ^12.0.0
+        version: 12.0.2
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -121,7 +124,7 @@ importers:
         version: link:../shared
       '@halfcopilot/tools':
         specifier: file:../tools
-        version: link:../tools
+        version: file:packages/tools(ws@8.20.0)(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -196,7 +199,7 @@ importers:
         version: link:../shared
       '@halfcopilot/tools':
         specifier: file:../tools
-        version: link:../tools
+        version: file:packages/tools(ws@8.20.0)(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -415,6 +418,24 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@halfcopilot/config@file:packages/config':
+    resolution: {directory: packages/config, type: directory}
+
+  '@halfcopilot/mcp@file:packages/mcp':
+    resolution: {directory: packages/mcp, type: directory}
+
+  '@halfcopilot/provider@file:packages/provider':
+    resolution: {directory: packages/provider, type: directory}
+
+  '@halfcopilot/shared@file:packages/shared':
+    resolution: {directory: packages/shared, type: directory}
+
+  '@halfcopilot/skills@file:packages/skills':
+    resolution: {directory: packages/skills, type: directory}
+
+  '@halfcopilot/tools@file:packages/tools':
+    resolution: {directory: packages/tools, type: directory}
+
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -487,7 +508,6 @@ packages:
     resolution: {integrity: sha512-4YTNHKqGng5+yiZt3mg77nmyuCfmNfX4fPmyUapBcIk+BdwSwmCWGXOUxhXbBEkFHtoN5boLj/5NON+u5QC9tg==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.60.3':
     resolution: {integrity: sha512-SU3kNlhkpI4UqlUc2VXPGK9o886ZsSeGfMAX2ba2b8DKmMXq4AL7KUrkSWVbb7koVqx41Yczx6dx5PNargIrEA==}
@@ -503,7 +523,6 @@ packages:
     resolution: {integrity: sha512-BMo8bOw8evlup/8G+cj5xWtPyp93xPdyoSN16Zy90Q2QZ0ZYRhCt6ZJSwbrRzG9HApFabjwj2p25TUPDWrhzqQ==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.60.3':
     resolution: {integrity: sha512-E0L8X1dZN1/Rph+5VPF6Xj2G7JJvMACVXtamTJIDrVI44Y3K+G8gQaMEAavbqCGTa16InptiVrX6eM6pmJ+7qA==}
@@ -1076,6 +1095,11 @@ packages:
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
+  marked@12.0.2:
+    resolution: {integrity: sha512-qXUm7e/YKFoqFPYPa3Ukg9xlI5cyAtGmyEIzMfW//m6kXwCy2Ps9DYf5ioijFKQ8qyuscrHoY04iJGctu2Kg0Q==}
+    engines: {node: '>= 18'}
+    hasBin: true
+
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
@@ -1567,6 +1591,52 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@halfcopilot/config@file:packages/config':
+    dependencies:
+      '@halfcopilot/shared': file:packages/shared
+      zod: 3.25.76
+
+  '@halfcopilot/mcp@file:packages/mcp(ws@8.20.0)(zod@3.25.76)':
+    dependencies:
+      '@halfcopilot/shared': file:packages/shared
+      '@halfcopilot/tools': file:packages/tools(ws@8.20.0)(zod@3.25.76)
+    transitivePeerDependencies:
+      - encoding
+      - ws
+      - zod
+
+  '@halfcopilot/provider@file:packages/provider(ws@8.20.0)(zod@3.25.76)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.36.3
+      '@halfcopilot/config': file:packages/config
+      '@halfcopilot/shared': file:packages/shared
+      openai: 4.104.0(ws@8.20.0)(zod@3.25.76)
+    transitivePeerDependencies:
+      - encoding
+      - ws
+      - zod
+
+  '@halfcopilot/shared@file:packages/shared': {}
+
+  '@halfcopilot/skills@file:packages/skills(ws@8.20.0)(zod@3.25.76)':
+    dependencies:
+      '@halfcopilot/shared': file:packages/shared
+      '@halfcopilot/tools': file:packages/tools(ws@8.20.0)(zod@3.25.76)
+    transitivePeerDependencies:
+      - encoding
+      - ws
+      - zod
+
+  '@halfcopilot/tools@file:packages/tools(ws@8.20.0)(zod@3.25.76)':
+    dependencies:
+      '@halfcopilot/config': file:packages/config
+      '@halfcopilot/provider': file:packages/provider(ws@8.20.0)(zod@3.25.76)
+      '@halfcopilot/shared': file:packages/shared
+    transitivePeerDependencies:
+      - encoding
+      - ws
+      - zod
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -2188,6 +2258,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  marked@12.0.2: {}
 
   math-intrinsics@1.1.0: {}
 

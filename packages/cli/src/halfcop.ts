@@ -24,6 +24,7 @@ import {
 } from "@halfcopilot/tools";
 import { AgentLoop, HybridProvider, type AgentMode } from "@halfcopilot/core";
 import { SkillRegistry, createBuiltinSkills } from "@halfcopilot/skills";
+import { marked } from "marked";
 import readline from "readline";
 
 const program = new Command();
@@ -203,7 +204,34 @@ function stripMarkdown(text: string): string {
     .replace(/\*\*([^*]+)\*\*/g, "$1"); // already handled above, but double-check
 }
 
-// Print text with code block detection
+// Configure marked for ANSI output
+const renderer = new marked.Renderer();
+// Use type assertion to bypass marked v12's strict TypeScript types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(renderer as any).code = function ({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return lines.map((line) => `  ${c.gray}│ ${line}${c.reset}\n`).join("");
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(renderer as any).codespan = function ({ text }: { text: string }) {
+  return `${c.cyan}${text}${c.reset}`;
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(renderer as any).blockquote = function ({ text }: { text: string }) {
+  return text.split("\n").map((line) => `  ${c.dim}▸ ${line}${c.reset}\n`).join("");
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(renderer as any).listitem = function ({ text }: { text: string }) {
+  return `  ${c.yellow}• ${text}\n`;
+};
+marked.use({ renderer });
+
+function flushStdout() {
+  // Node.js stdout doesn't have a flush method, but we can use write() with a callback
+  // or rely on the fact that stdout is line-buffered in most terminals
+}
+
+// Print text with markdown rendering
 function printFormatted(text: string) {
   const parts = text.split(/(```[\s\S]*?```)/);
   for (const part of parts) {
@@ -212,9 +240,12 @@ function printFormatted(text: string) {
       const lines = code.split("\n");
       for (const line of lines) {
         process.stdout.write(`  ${c.gray}│ ${line}${c.reset}\n`);
+        flushStdout();
       }
-    } else {
-      process.stdout.write(part);
+    } else if (part.trim()) {
+      const html = marked.parse(part) as string;
+      process.stdout.write(html);
+      flushStdout();
     }
   }
 }

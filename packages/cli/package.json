@@ -24,6 +24,7 @@
     "@halfcopilot/tools": "file:../tools",
     "commander": "^12.0.0",
     "ink": "^4.4.0",
+    "marked": "^12.0.0",
     "react": "^18.3.0"
   },
   "devDependencies": {
