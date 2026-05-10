@@ -6,7 +6,8 @@
       "inputs": ["src/**", "tsconfig.json"],
       "outputs": ["dist/**", "**/*.tsbuildinfo"],
       "cache": false,
-      "env": ["NPM_TOKEN", "GITHUB_TOKEN"]
+      "env": ["NPM_TOKEN", "GITHUB_TOKEN"],
+      "persistent": false
     },
     "dev": {
       "cache": false,
