@@ -13,6 +13,14 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
+    "@halfcopilot/config": "workspace:*",
+    "@halfcopilot/core": "workspace:*",
+    "@halfcopilot/mcp": "workspace:*",
+    "@halfcopilot/memory": "workspace:*",
+    "@halfcopilot/provider": "workspace:*",
+    "@halfcopilot/shared": "workspace:*",
+    "@halfcopilot/skills": "workspace:*",
+    "@halfcopilot/tools": "workspace:*",
     "commander": "^12.0.0",
     "ink": "^4.4.0",
     "react": "^18.3.0"

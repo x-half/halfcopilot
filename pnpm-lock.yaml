@@ -29,6 +29,30 @@ importers:
 
   packages/cli:
     dependencies:
+      '@halfcopilot/config':
+        specifier: workspace:*
+        version: link:../config
+      '@halfcopilot/core':
+        specifier: workspace:*
+        version: link:../core
+      '@halfcopilot/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@halfcopilot/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@halfcopilot/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@halfcopilot/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@halfcopilot/skills':
+        specifier: workspace:*
+        version: link:../skills
+      '@halfcopilot/tools':
+        specifier: workspace:*
+        version: link:../tools
       commander:
         specifier: ^12.0.0
         version: 12.1.0
