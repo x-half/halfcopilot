@@ -4,7 +4,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["src/**", "tsconfig.json"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "**/*.tsbuildinfo"],
       "cache": false,
       "env": ["NPM_TOKEN", "GITHUB_TOKEN"]
     },
