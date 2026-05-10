@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
-    "@halfcopilot/config": "file:../config",
-    "@halfcopilot/shared": "file:../shared",
+    "@halfcopilot/config": "workspace:*",
+    "@halfcopilot/shared": "workspace:*",
     "openai": "^4.77.0"
   },
   "devDependencies": {
