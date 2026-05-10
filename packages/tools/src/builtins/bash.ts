@@ -1,6 +1,7 @@
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
+import { parseShellCommand, buildShellArgs } from "./shell-parser.js";
 
 export function createBashTool(): Tool {
   return {
@@ -32,9 +33,17 @@ export function createBashTool(): Tool {
         timeout?: number;
         cwd?: string;
       };
+
       return new Promise((resolve) => {
-        exec(
-          command,
+        const parsed = parseShellCommand(command);
+        if (parsed.error) {
+          resolve({ output: "", error: parsed.error });
+          return;
+        }
+
+        execFile(
+          parsed.command,
+          parsed.args,
           {
             timeout,
             cwd: cwd ?? context.workingDirectory,

@@ -185,14 +185,18 @@ ${summary.references.length > 0 ? summary.references.join("\n") : "No references
     const basePath = this.getBasePath(type);
     mkdirSync(basePath, { recursive: true });
     const lockPath = join(basePath, `.lock_${type}`);
-    while (true) {
+    const maxRetries = 100;
+    let retries = 0;
+    while (retries < maxRetries) {
       try {
         mkdirSync(lockPath);
         return;
       } catch {
         await new Promise((r) => setTimeout(r, 50));
+        retries++;
       }
     }
+    throw new Error(`Failed to acquire lock for ${type} after ${maxRetries} retries`);
   }
 
   private releaseLock(type: MemoryType): void {

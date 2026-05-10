@@ -1,6 +1,39 @@
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
 import { readFile } from "node:fs/promises";
+import { resolve, isAbsolute, relative } from "node:path";
+
+const PROTECTED_PATHS = [
+  "/etc",
+  "/System",
+  "/usr",
+  "/var",
+  "/boot",
+  "/sys",
+  "/proc",
+  "/dev",
+];
+
+function isPathSafe(targetPath: string, projectRoot: string): boolean {
+  try {
+    const resolved = resolve(projectRoot, targetPath);
+    const rootResolved = resolve(projectRoot);
+
+    if (!resolved.startsWith(rootResolved)) {
+      return false;
+    }
+
+    for (const protectedPath of PROTECTED_PATHS) {
+      if (resolved.startsWith(protectedPath)) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function createFileReadTool(): Tool {
   return {
@@ -33,6 +66,21 @@ export function createFileReadTool(): Tool {
         limit?: number;
         showLineNumbers?: boolean;
       };
+
+      if (!isAbsolute(path)) {
+        return {
+          output: "",
+          error: "Path must be absolute",
+        };
+      }
+
+      if (!isPathSafe(path, context.projectRoot)) {
+        return {
+          output: "",
+          error: `Access to path outside project root is not allowed: ${path}`,
+        };
+      }
+
       try {
         const content = await readFile(path, "utf-8");
         let lines = content.split("\n");

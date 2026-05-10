@@ -1,6 +1,6 @@
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
-import { execSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 
 export function createGrepTool(): Tool {
   return {
@@ -33,12 +33,11 @@ export function createGrepTool(): Tool {
         ignoreCase?: boolean;
       };
 
-      let cmd = "grep";
+      let cmd = "rg";
       try {
-        execSync("which rg", { stdio: "ignore" });
-        cmd = "rg";
+        execFileSync("which", ["rg"], { stdio: "ignore" });
       } catch {
-        /* fallback to grep */
+        cmd = "grep";
       }
 
       const args: string[] = [];
@@ -46,23 +45,25 @@ export function createGrepTool(): Tool {
         args.push("--no-heading", "-n");
         if (ignoreCase) args.push("-i");
         if (glob) args.push("--glob", glob);
-        args.push("--", pattern, path);
+        args.push("--");
+        args.push(pattern);
+        args.push(path);
       } else {
         args.push("-n");
         if (ignoreCase) args.push("-i");
         if (glob) args.push("--include", glob);
-        args.push("-r", "--", pattern, path);
+        args.push("-r");
+        args.push("--");
+        args.push(pattern);
+        args.push(path);
       }
 
       try {
-        const result = execSync(
-          `${cmd} ${args.map((a) => `'${a}'`).join(" ")}`,
-          {
-            encoding: "utf-8",
-            maxBuffer: 10 * 1024 * 1024,
-            timeout: 30000,
-          },
-        );
+        const result = execFileSync(cmd, args, {
+          encoding: "utf-8",
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 30000,
+        });
         return { output: result.slice(0, 50000) || "No matches found" };
       } catch (err: unknown) {
         const execErr = err as { status?: number; message?: string };

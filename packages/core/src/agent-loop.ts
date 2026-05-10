@@ -80,8 +80,15 @@ export class AgentLoop {
         }
       }
 
+      if (!stream) {
+        this.currentState = AgentState.ERROR;
+        yield { type: "state_change", state: AgentState.ERROR };
+        yield { type: "error", error: new Error("Failed to initialize provider stream after 3 retries") };
+        return;
+      }
+
       try {
-        for await (const event of stream!) {
+        for await (const event of stream) {
           if (event.type === "text") {
             fullText += event.content;
             yield { type: "text", content: event.content };

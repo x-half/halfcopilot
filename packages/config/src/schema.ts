@@ -1,5 +1,24 @@
 import { z } from "zod";
 
+const nonEmptyString = (msg = "String cannot be empty") =>
+  z.string().min(1, msg).refine(
+    (val) => val.trim().length > 0,
+    { message: msg }
+  );
+
+const urlString = (msg = "Invalid URL format") =>
+  nonEmptyString(msg).refine(
+    (val) => {
+      try {
+        const url = new URL(val);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "URL must use http or https protocol" },
+  );
+
 export const ModelConfigSchema = z.object({
   contextWindow: z.number().positive(),
   maxOutput: z.number().positive(),
@@ -8,17 +27,17 @@ export const ModelConfigSchema = z.object({
 
 export const ProviderConfigSchema = z.object({
   type: z.enum(["openai-compatible", "anthropic"]),
-  baseUrl: z.string().url().optional(),
-  apiKey: z.string(),
+  baseUrl: urlString().optional(),
+  apiKey: nonEmptyString("API key cannot be empty"),
   models: z.record(z.string(), ModelConfigSchema),
 });
 
 export const MCPServerConfigSchema = z.object({
-  command: z.string(),
+  command: nonEmptyString("Command cannot be empty"),
   args: z.array(z.string()).optional().default([]),
   env: z.record(z.string(), z.string()).optional(),
   transport: z.enum(["stdio", "sse"]).optional().default("stdio"),
-  url: z.string().url().optional(),
+  url: urlString().optional(),
 });
 
 export const SecurityConfigSchema = z.object({
