@@ -1,7 +1,7 @@
 {
   "name": "halfcopilot",
-  "version": "1.0.29",
-  "description": "HalfCopilot \u2014 Multi-model Agent Framework CLI with Beautiful Chat Interface",
+  "version": "1.1.6",
+  "description": "HalfCopilot — Multi-model Agent Framework CLI",
   "type": "module",
   "bin": {
     "halfcop": "./bin/halfcop.js",
@@ -19,15 +19,6 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@halfcopilot/shared": "file:./dist/packages/shared/dist",
-    "@halfcopilot/config": "file:./dist/packages/config/dist",
-    "@halfcopilot/provider": "file:./dist/packages/provider/dist",
-    "@halfcopilot/tools": "file:./dist/packages/tools/dist",
-    "@halfcopilot/core": "file:./dist/packages/core/dist",
-    "@halfcopilot/memory": "file:./dist/packages/memory/dist",
-    "@halfcopilot/mcp": "file:./dist/packages/mcp/dist",
-    "@halfcopilot/skills": "file:./dist/packages/skills/dist",
-    "@halfcopilot/cli": "file:./dist/packages/cli/dist",
     "commander": "^12.0.0",
     "openai": "^4.77.0",
     "@anthropic-ai/sdk": "^0.36.0",
