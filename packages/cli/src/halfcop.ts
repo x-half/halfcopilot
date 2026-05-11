@@ -814,50 +814,94 @@ async function handleCommand(
 
   switch (command) {
     case "/model":
-      if (arg) {
-        opts.model = arg;
-        updateStatus("thinking", `Switching to ${arg}...`);
-        try {
-          const providerName =
-            opts.provider ?? config.defaultProvider ?? "xiaomi";
-          const provider = providerRegistry.get(providerName);
+      {
+        const providerName =
+          opts.provider ?? config.defaultProvider ?? "xiaomi";
+        const providerCfg = config.providers[providerName];
+        const availableModels = providerCfg
+          ? Object.keys(providerCfg.models)
+          : [];
 
-          const toolRegistry = new ToolRegistry();
-          const builtinTools = createBuiltinTools();
-          builtinTools.forEach((t) => toolRegistry.register(t));
+        if (arg) {
+          let targetModel = arg;
+          const numIdx = parseInt(arg, 10);
+          if (
+            !isNaN(numIdx) &&
+            numIdx >= 1 &&
+            numIdx <= availableModels.length
+          ) {
+            targetModel = availableModels[numIdx - 1];
+          }
 
-          const permissions = new PermissionChecker({
-            autoApproveSafe: config.permissions.autoApproveSafe,
-            allow: config.permissions.allow,
-            deny: config.permissions.deny,
-          });
+          if (!availableModels.includes(targetModel)) {
+            console.log(
+              `  ${c.red}✗ Unknown model: ${targetModel}${c.reset}`,
+            );
+            console.log(
+              `  ${c.dim}Available: ${availableModels.join(", ")}${c.reset}`,
+            );
+            break;
+          }
 
-          const executor = new ToolExecutor(
-            toolRegistry,
-            permissions,
-            askApproval,
-          );
+          opts.model = targetModel;
+          updateStatus("thinking", `Switching to ${targetModel}...`);
+          try {
+            const provider = providerRegistry.get(providerName);
 
-          const newAgent = new AgentLoop({
-            provider,
-            providerName,
-            model: arg,
-            tools: toolRegistry,
-            executor,
-            permissions,
-            maxTurns: config.maxTurns,
-            mode: (opts.mode as AgentMode) ?? "auto",
-          });
+            const toolRegistry = new ToolRegistry();
+            const builtinTools = createBuiltinTools();
+            builtinTools.forEach((t) => toolRegistry.register(t));
 
-          agentRef.current = newAgent;
-          saveConfig({ defaultModel: arg });
-          console.log(`  ${c.green}✓ Model: ${arg}${c.reset}`);
-          return { newModel: arg };
-        } catch (err) {
-          console.log(`  ${c.red}✗ Model not found: ${arg}${c.reset}`);
+            const permissions = new PermissionChecker({
+              autoApproveSafe: config.permissions.autoApproveSafe,
+              allow: config.permissions.allow,
+              deny: config.permissions.deny,
+            });
+
+            const executor = new ToolExecutor(
+              toolRegistry,
+              permissions,
+              askApproval,
+            );
+
+            const newAgent = new AgentLoop({
+              provider,
+              providerName,
+              model: targetModel,
+              tools: toolRegistry,
+              executor,
+              permissions,
+              maxTurns: config.maxTurns,
+              mode: (opts.mode as AgentMode) ?? "auto",
+            });
+
+            agentRef.current = newAgent;
+            saveConfig({ defaultModel: targetModel });
+            console.log(`  ${c.green}✓ Model: ${targetModel}${c.reset}`);
+            return { newModel: targetModel };
+          } catch (err) {
+            console.log(
+              `  ${c.red}✗ Failed to switch: ${err instanceof Error ? err.message : err}${c.reset}`,
+            );
+          }
+        } else {
+          console.log(`\n  ${c.cyan}Current Model: ${c.bold}${currentModel}${c.reset}\n`);
+          if (availableModels.length > 0) {
+            console.log(`  ${c.dim}Available models for ${providerName}:${c.reset}`);
+            for (let i = 0; i < availableModels.length; i++) {
+              const marker =
+                availableModels[i] === currentModel
+                  ? ` ${c.green}← ${c.bold}(current)${c.reset}`
+                  : "";
+              console.log(
+                `  ${c.bold}${i + 1}${c.reset}. ${c.white}${availableModels[i]}${c.reset}${marker}`,
+              );
+            }
+            console.log(
+              `\n  ${c.dim}Usage: /model <name> or /model <number>${c.reset}`,
+            );
+          }
         }
-      } else {
-        console.log(`  ${c.yellow}Model: ${currentModel}${c.reset}`);
       }
       break;
 
