@@ -7,7 +7,7 @@ describe("CLI program structure", () => {
     program
       .name("halfcop")
       .description("HalfCopilot — Multi-model Agent Framework CLI")
-      .version("1.1.6");
+      .version("1.1.7");
 
     program.command("chat").description("Start interactive chat mode");
     program.command("run <prompt>").description("Run a single prompt");
@@ -32,9 +32,9 @@ describe("CLI program structure", () => {
 
   it("should have correct program metadata", () => {
     const program = new Command();
-    program.name("halfcop").version("1.1.6");
+    program.name("halfcop").version("1.1.7");
     expect(program.name()).toBe("halfcop");
-    expect(program.version()).toBe("1.1.6");
+    expect(program.version()).toBe("1.1.7");
   });
 
   it("should parse chat command options", () => {
