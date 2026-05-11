@@ -72,34 +72,11 @@ const binDir = join(npmDir, "bin");
 if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true });
 
 const binContent = `#!/usr/bin/env node
-
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import { pathToFileURL } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const mainPath = join(
-  __dirname,
-  "..",
-  "dist",
-  "packages",
-  "cli",
-  "dist",
-  "halfcop.js",
-);
-const mainModule = pathToFileURL(mainPath).href;
-
-try {
-  await import(mainModule);
-} catch (err) {
-  console.error("Failed to start HalfCopilot:", err.message);
-  process.exit(1);
-}
+const { join } = require("path");
+require(join(__dirname, "..", "dist", "packages", "cli", "dist", "halfcop.js"));
 `;
 
-writeFileSync(join(binDir, "halfcop.js"), binContent);
+writeFileSync(join(binDir, "halfcop.cjs"), binContent);
 console.log("   \u2713 Bin setup complete");
 
 // Step 4: Update npm/package.json with current version

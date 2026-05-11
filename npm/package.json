@@ -1,11 +1,11 @@
 {
   "name": "halfcopilot",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "HalfCopilot — Multi-model Agent Framework CLI",
   "type": "module",
   "bin": {
-    "halfcop": "./bin/halfcop.js",
-    "halfcopilot": "./bin/halfcop.js"
+    "halfcop": "./bin/halfcop.cjs",
+    "halfcopilot": "./bin/halfcop.cjs"
   },
   "main": "./dist/index.js",
   "scripts": {

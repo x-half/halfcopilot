@@ -31,7 +31,7 @@ const program = new Command();
 program
   .name("halfcop")
   .description("HalfCopilot — Multi-model Agent Framework CLI")
-  .version("1.1.7");
+  .version("1.1.8");
 
 interface AgentOptions {
   model?: string;
