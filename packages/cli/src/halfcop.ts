@@ -1215,7 +1215,7 @@ program
     );
     console.log("");
 
-    // Provider templates - updated with accurate endpoints
+    // Provider templates - from official API docs
     const providers: Array<{
       name: string;
       label: string;
@@ -1224,11 +1224,31 @@ program
       desc: string;
     }> = [
       {
+        name: "deepseek",
+        label: "DeepSeek",
+        desc: "v4 系列，高性价比深度推理",
+        baseUrl: "https://api.deepseek.com",
+        models: [
+          "deepseek-v4-flash",
+          "deepseek-v4-pro",
+          "deepseek-chat",
+          "deepseek-reasoner",
+        ],
+      },
+      {
         name: "minimax",
         label: "MiniMax",
-        desc: "M2.7 / M2.5 — 海螺AI同款",
+        desc: "M2 系列，204K 上下文",
         baseUrl: "https://api.minimaxi.com/v1",
-        models: ["MiniMax-M2.7", "MiniMax-M2.5"],
+        models: [
+          "MiniMax-M2.7",
+          "MiniMax-M2.7-highspeed",
+          "MiniMax-M2.5",
+          "MiniMax-M2.5-highspeed",
+          "MiniMax-M2.1",
+          "MiniMax-M2.1-highspeed",
+          "MiniMax-M2",
+        ],
       },
       {
         name: "xiaomi",
@@ -1238,176 +1258,186 @@ program
         models: ["mimo-v2.5-pro", "mimo-v2.5"],
       },
       {
-        name: "deepseek",
-        label: "DeepSeek",
-        desc: "高性价比，深度推理",
-        baseUrl: "https://api.deepseek.com/v1",
-        models: ["deepseek-chat", "deepseek-reasoner"],
+        name: "openai",
+        label: "OpenAI",
+        desc: "GPT-4o / GPT-4o-mini",
+        baseUrl: "https://api.openai.com/v1",
+        models: ["gpt-4o", "gpt-4o-mini", "o3", "o4-mini"],
+      },
+      {
+        name: "anthropic",
+        label: "Anthropic Claude",
+        desc: "Claude Sonnet 4 / Haiku 3.5",
+        baseUrl: "",
+        models: [
+          "claude-sonnet-4-20250514",
+          "claude-3-5-haiku-20241022",
+        ],
       },
       {
         name: "qwen",
         label: "通义千问 Qwen",
         desc: "阿里云出品",
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        models: ["qwen-turbo", "qwen-plus"],
-      },
-      {
-        name: "openai",
-        label: "OpenAI",
-        desc: "GPT-4o / GPT-4o-mini",
-        baseUrl: "https://api.openai.com/v1",
-        models: ["gpt-4o", "gpt-4o-mini"],
-      },
-      {
-        name: "anthropic",
-        label: "Anthropic Claude",
-        desc: "Claude Sonnet 4",
-        baseUrl: "",
-        models: ["claude-sonnet-4-20250514"],
+        models: ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-coder-plus"],
       },
     ];
 
-    console.log(
-      `  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`,
-    );
-    console.log("");
-    console.log(`  ${c.cyan}${c.bold}📦 可用厂商:${c.reset}`);
-    console.log("");
-
-    for (let i = 0; i < providers.length; i++) {
-      const p = providers[i];
-      const configured = providersCfg[p.name]
-        ? ` ${c.green}(已配置)${c.reset}`
-        : "";
+    while (true) {
       console.log(
-        `  ${c.bold}${i + 1}${c.reset}. ${c.white}${p.label}${c.reset} — ${c.dim}${p.desc}${c.reset}${configured}`,
+        `  ${c.dim}选择你要配置的模型厂商，输入 API Key 即可。${c.reset}`,
       );
-    }
-    console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
-    console.log("");
-
-    let selectedIdx = -1;
-
-    // Keyboard navigation (basic, using enter)
-    const choice = await ask(
-      `  ${c.green}选择你要配置的厂商 (0-${providers.length}): ${c.reset}`,
-    );
-    selectedIdx = parseInt(choice.trim()) - 1;
-
-    if (
-      isNaN(selectedIdx) ||
-      selectedIdx < -1 ||
-      selectedIdx >= providers.length
-    ) {
-      console.log(`  ${c.red}无效选择${c.reset}`);
-      rl.close();
-      return;
-    }
-
-    if (selectedIdx === -1) {
-      console.log(`  ${c.yellow}配置完成！${c.reset}`);
-      rl.close();
-      return;
-    }
-
-    const selected = providers[selectedIdx];
-
-    console.log("");
-    console.log(`  ${c.cyan}配置 ${selected.label}${c.reset}`);
-
-    let apiKey: string;
-
-    if (selected.name === "xiaomi") {
       console.log("");
-      console.log(`  ${c.dim}小米 Token Plan API Key 示例格式:${c.reset}`);
-      console.log(`  ${c.dim}tp-xxxxxxxxxx...${c.reset}`);
-    }
-
-    if (selected.name === "minimax") {
+      console.log(`  ${c.cyan}${c.bold}📦 可用厂商:${c.reset}`);
       console.log("");
-      console.log(`  ${c.dim}MiniMax API Key (来自 minimaxi.com):${c.reset}`);
-    }
 
-    if (selected.name === "deepseek") {
-      console.log("");
-      console.log(
-        `  ${c.dim}DeepSeek API Key (来自 api.deepseek.com):${c.reset}`,
-      );
-    }
-
-    apiKey = await ask(`  ${c.green}API Key: ${c.reset}`);
-
-    if (!apiKey.trim()) {
-      console.log(`  ${c.yellow}已跳过${c.reset}`);
-      rl.close();
-      return;
-    }
-
-    // Build models object with proper context windows
-    const modelConfigs: Record<
-      string,
-      { contextWindow: number; maxOutput: number }
-    > = {};
-
-    if (selected.name === "minimax") {
-      modelConfigs["MiniMax-M2.7"] = {
-        contextWindow: 128000,
-        maxOutput: 16384,
-      };
-      modelConfigs["MiniMax-M2.5"] = {
-        contextWindow: 128000,
-        maxOutput: 16384,
-      };
-    } else if (selected.name === "deepseek") {
-      modelConfigs["deepseek-chat"] = { contextWindow: 64000, maxOutput: 8192 };
-      modelConfigs["deepseek-reasoner"] = {
-        contextWindow: 64000,
-        maxOutput: 8192,
-      };
-    } else if (selected.name === "xiaomi") {
-      modelConfigs["mimo-v2.5-pro"] = {
-        contextWindow: 128000,
-        maxOutput: 16384,
-      };
-      modelConfigs["mimo-v2.5"] = { contextWindow: 128000, maxOutput: 16384 };
-    } else {
-      for (const m of selected.models) {
-        modelConfigs[m] = { contextWindow: 128000, maxOutput: 8192 };
+      for (let i = 0; i < providers.length; i++) {
+        const p = providers[i];
+        const configured = providersCfg[p.name]
+          ? ` ${c.green}(已配置)${c.reset}`
+          : "";
+        console.log(
+          `  ${c.bold}${i + 1}${c.reset}. ${c.white}${p.label}${c.reset} — ${c.dim}${p.desc}${c.reset}${configured}`,
+        );
       }
+      console.log(`  ${c.bold}0${c.reset}. ${c.dim}完成配置，退出${c.reset}`);
+      console.log("");
+
+      const choice = await ask(
+        `  ${c.green}选择你要配置的厂商 (0-${providers.length}): ${c.reset}`,
+      );
+      const selectedIdx = parseInt(choice.trim()) - 1;
+
+      if (
+        isNaN(selectedIdx) ||
+        selectedIdx < -1 ||
+        selectedIdx >= providers.length
+      ) {
+        console.log(`  ${c.red}无效选择${c.reset}\n`);
+        continue;
+      }
+
+      if (selectedIdx === -1) {
+        console.log(`  ${c.yellow}配置完成！${c.reset}`);
+        break;
+      }
+
+      const selected = providers[selectedIdx];
+
+      console.log("");
+      console.log(`  ${c.cyan}配置 ${selected.label}${c.reset}`);
+
+      if (selected.name === "xiaomi") {
+        console.log("");
+        console.log(`  ${c.dim}小米 Token Plan API Key 示例格式:${c.reset}`);
+        console.log(`  ${c.dim}tp-xxxxxxxxxx...${c.reset}`);
+      }
+
+      if (selected.name === "minimax") {
+        console.log("");
+        console.log(`  ${c.dim}MiniMax API Key (来自 minimaxi.com):${c.reset}`);
+      }
+
+      if (selected.name === "deepseek") {
+        console.log("");
+        console.log(
+          `  ${c.dim}DeepSeek API Key (来自 api.deepseek.com):${c.reset}`,
+        );
+      }
+
+      const apiKey = await ask(`  ${c.green}API Key: ${c.reset}`);
+
+      if (!apiKey.trim()) {
+        console.log(`  ${c.yellow}已跳过${c.reset}\n`);
+        continue;
+      }
+
+      // Let user select which models to enable
+      console.log(`\n  ${c.cyan}可用模型:${c.reset}`);
+      const modelSelections: boolean[] = [];
+      for (let i = 0; i < selected.models.length; i++) {
+        modelSelections.push(true);
+        console.log(
+          `  ${c.bold}${i + 1}${c.reset}. ${c.white}${selected.models[i]}${c.reset} ${c.green}[启用]${c.reset}`,
+        );
+      }
+      console.log(
+        `  ${c.dim}按 Enter 启用全部，或输入要禁用的编号(逗号分隔):${c.reset}`,
+      );
+      const disableChoice = await ask(`  ${c.green}禁用: ${c.reset}`);
+      if (disableChoice.trim()) {
+        const disableIndices = disableChoice
+          .split(",")
+          .map((s) => parseInt(s.trim()) - 1)
+          .filter((i) => i >= 0 && i < selected.models.length);
+        for (const i of disableIndices) modelSelections[i] = false;
+      }
+
+      const enabledModels = selected.models.filter((_, i) => modelSelections[i]);
+
+      // Build models object with proper context windows
+      const modelConfigs: Record<
+        string,
+        { contextWindow: number; maxOutput: number }
+      > = {};
+
+      if (selected.name === "minimax") {
+        for (const m of enabledModels) {
+          modelConfigs[m] = { contextWindow: 204800, maxOutput: 16384 };
+        }
+      } else if (selected.name === "deepseek") {
+        for (const m of enabledModels) {
+          modelConfigs[m] = {
+            contextWindow:
+              m === "deepseek-chat" || m === "deepseek-reasoner"
+                ? 65536
+                : 131072,
+            maxOutput: 8192,
+          };
+        }
+      } else if (selected.name === "xiaomi") {
+        for (const m of enabledModels) {
+          modelConfigs[m] = { contextWindow: 128000, maxOutput: 16384 };
+        }
+      } else {
+        for (const m of enabledModels) {
+          modelConfigs[m] = { contextWindow: 128000, maxOutput: 16384 };
+        }
+      }
+
+      // Save provider config
+      providersCfg[selected.name] = {
+        type: selected.name === "anthropic" ? "anthropic" : "openai-compatible",
+        ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
+        apiKey,
+        models: modelConfigs,
+      };
+
+      // Set as default if no default set
+      const configAny = config as Record<string, unknown>;
+      if (!configAny.defaultProvider) {
+        configAny.defaultProvider = selected.name;
+        configAny.defaultModel = enabledModels[0];
+      }
+
+      // Write config
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+
+      console.log("");
+      console.log(
+        `  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`,
+      );
+      console.log(`  ${c.dim}配置文件: ${configFile}${c.reset}`);
+      console.log(
+        `  ${c.dim}模型: ${enabledModels.join(", ")}${c.reset}`,
+      );
+
+      if (configAny.defaultProvider === selected.name) {
+        console.log(`  ${c.green}已设为默认厂商${c.reset}`);
+      }
+      console.log("");
     }
-
-    // Save provider config
-    providersCfg[selected.name] = {
-      type: selected.name === "anthropic" ? "anthropic" : "openai-compatible",
-      ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
-      apiKey,
-      models: modelConfigs,
-    };
-
-    // Set as default if no default set
-    const configAny = config as Record<string, unknown>;
-    if (!configAny.defaultProvider) {
-      configAny.defaultProvider = selected.name;
-      configAny.defaultModel = selected.models[0];
-    }
-
-    // Write config
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
-
-    console.log("");
-    console.log(
-      `  ${c.green}${c.bold}✅ ${selected.label} 配置成功！${c.reset}`,
-    );
-    console.log(`  ${c.dim}配置文件: ${configFile}${c.reset}`);
-    console.log(
-      `  ${c.dim}模型: ${Object.keys(modelConfigs).join(", ")}${c.reset}`,
-    );
-
-    if (configAny.defaultProvider === selected.name) {
-      console.log(`  ${c.green}已设为默认厂商${c.reset}`);
-    }
-    console.log("");
 
     rl.close();
   });
