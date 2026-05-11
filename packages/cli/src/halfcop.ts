@@ -32,7 +32,7 @@ const program = new Command();
 program
   .name("halfcop")
   .description("HalfCopilot — Multi-model Agent Framework CLI")
-  .version("1.1.8");
+  .version(cliPkg.version);
 
 interface AgentOptions {
   model?: string;
@@ -540,8 +540,8 @@ async function runInteractive(options: AgentOptions = {}) {
         const result = await handleCommand(
           trimmed,
           options,
-          modelName,
-          providerName,
+          currentModel,
+          currentProvider,
           agentRef,
           providerRegistry,
           config,
