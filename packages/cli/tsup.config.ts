@@ -10,5 +10,8 @@ export default defineConfig({
   platform: 'node',
   splitting: false,
   noExternal: [/@halfcopilot\//],
-  external: ['ink', 'react', 'react-devtools-core'],
+  external: [
+    'ink', 'react', 'react-devtools-core', 'punycode',
+    'tr46', 'whatwg-url', 'webidl-conversions',
+  ],
 })
