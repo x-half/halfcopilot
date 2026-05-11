@@ -11,7 +11,8 @@ export default defineConfig({
   splitting: false,
   noExternal: [/@halfcopilot\//],
   external: [
-    'ink', 'react', 'react-devtools-core', 'punycode',
-    'tr46', 'whatwg-url', 'webidl-conversions',
+    'ink', 'react', 'react-devtools-core',
+    'punycode', 'tr46', 'whatwg-url', 'webidl-conversions',
+    'agentkeepalive', 'humanize-ms', 'node-domexception',
   ],
 })
