@@ -1,4 +1,7 @@
-import { StateGraph, END, Annotation } from "@langchain/langgraph";
+import { StateGraph, END, Annotation, MemorySaver } from "@langchain/langgraph";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { ContentBlock } from "@halfcopilot/provider";
 import type { AgentConfig, AgentEvent, AgentMode } from "./types.js";
 import { AgentState as AS } from "./types.js";
@@ -37,6 +40,27 @@ function isRetryable(err: Error): boolean {
 }
 
 // ── Agent Execution ──
+function getCheckpointPath(): string {
+  const dir = join(homedir(), ".halfcopilot", "memory");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return join(dir, "checkpoint.json");
+}
+
+function loadCheckpoint(): any[] | null {
+  try {
+    const path = getCheckpointPath();
+    if (!existsSync(path)) return null;
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    return Array.isArray(data) ? data : null;
+  } catch { return null; }
+}
+
+function saveCheckpoint(messages: any[]): void {
+  try {
+    writeFileSync(getCheckpointPath(), JSON.stringify(messages, null, 2), "utf-8");
+  } catch { /* best effort */ }
+}
+
 export async function* runAgent(
   userMessage: string,
   config: AgentConfig,
@@ -122,6 +146,9 @@ export async function* runAgent(
     return "__end__";
   }
 
+  // ── Checkpointer (persistence) ──
+  const checkpointer = new MemorySaver();
+
   // ── Compile Graph ──
   const graph = new StateGraph(AgentAnnotation)
     .addNode("agent", agentNode)
@@ -131,19 +158,28 @@ export async function* runAgent(
     })
     .addEdge("__start__", "agent");
 
-  const app = graph.compile();
+  const app = graph.compile({ checkpointer });
 
   // ── Stream Execution ──
   yield { type: "state_change", state: AS.THINKING };
 
+  // Load previous conversation from checkpoint
+  const savedMessages = loadCheckpoint() ?? [];
+  const messages = [...savedMessages, { role: "user" as const, content: userMessage }];
+
   const initialState: GraphState = {
-    messages: [{ role: "user", content: userMessage }],
+    messages,
     turnCount: 0,
     toolErrors: 0,
   };
 
+  const threadId = `halfcopilot-${new Date().toISOString().split("T")[0]}`;
+  const runConfig = { configurable: { thread_id: threadId } };
+
+  let finalMessages: any[] = [];
+
   // Use stream() to get each step's state updates
-  for await (const step of await app.stream(initialState)) {
+  for await (const step of await app.stream(initialState, runConfig)) {
     // step = { agent: { messages: [...], ... } } or { __end__: ... }
     const update = step as Record<string, any>;
     const nodeName = Object.keys(update)[0];
@@ -151,6 +187,7 @@ export async function* runAgent(
     if (nodeName === "agent") {
       const nodeOutput = update.agent;
       if (!nodeOutput?.messages) continue;
+      finalMessages.push(...nodeOutput.messages);
 
       for (const msg of nodeOutput.messages) {
         if (msg.role === "assistant") {
@@ -178,6 +215,11 @@ export async function* runAgent(
     if (nodeName === "__end__" || Object.keys(update).length === 0) {
       break;
     }
+  }
+
+  // Save conversation checkpoint
+  if (finalMessages.length > 0) {
+    saveCheckpoint([...savedMessages, ...finalMessages]);
   }
 
   yield { type: "state_change", state: AS.IDLE };
