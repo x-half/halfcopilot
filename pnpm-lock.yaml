@@ -77,7 +77,7 @@ importers:
   packages/config:
     dependencies:
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
       zod:
         specifier: ^3.24.0
@@ -96,16 +96,16 @@ importers:
   packages/core:
     dependencies:
       '@halfcopilot/config':
-        specifier: file:../config
+        specifier: workspace:*
         version: link:../config
       '@halfcopilot/provider':
-        specifier: file:../provider
+        specifier: workspace:*
         version: link:../provider
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
       '@halfcopilot/tools':
-        specifier: file:../tools
+        specifier: workspace:*
         version: link:../tools
     devDependencies:
       '@types/node':
@@ -121,11 +121,11 @@ importers:
   packages/mcp:
     dependencies:
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
       '@halfcopilot/tools':
-        specifier: file:../tools
-        version: file:packages/tools(ws@8.20.0)(zod@3.25.76)
+        specifier: workspace:*
+        version: link:../tools
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -140,10 +140,10 @@ importers:
   packages/memory:
     dependencies:
       '@halfcopilot/config':
-        specifier: file:../config
+        specifier: workspace:*
         version: link:../config
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
     devDependencies:
       '@types/node':
@@ -162,10 +162,10 @@ importers:
         specifier: ^0.36.0
         version: 0.36.3
       '@halfcopilot/config':
-        specifier: file:../config
+        specifier: workspace:*
         version: link:../config
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
       openai:
         specifier: ^4.77.0
@@ -196,11 +196,11 @@ importers:
   packages/skills:
     dependencies:
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
       '@halfcopilot/tools':
-        specifier: file:../tools
-        version: file:packages/tools(ws@8.20.0)(zod@3.25.76)
+        specifier: workspace:*
+        version: link:../tools
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -215,13 +215,13 @@ importers:
   packages/tools:
     dependencies:
       '@halfcopilot/config':
-        specifier: file:../config
+        specifier: workspace:*
         version: link:../config
       '@halfcopilot/provider':
-        specifier: file:../provider
+        specifier: workspace:*
         version: link:../provider
       '@halfcopilot/shared':
-        specifier: file:../shared
+        specifier: workspace:*
         version: link:../shared
     devDependencies:
       '@types/node':
@@ -574,18 +574,6 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@halfcopilot/config@file:packages/config':
-    resolution: {directory: packages/config, type: directory}
-
-  '@halfcopilot/provider@file:packages/provider':
-    resolution: {directory: packages/provider, type: directory}
-
-  '@halfcopilot/shared@file:packages/shared':
-    resolution: {directory: packages/shared, type: directory}
-
-  '@halfcopilot/tools@file:packages/tools':
-    resolution: {directory: packages/tools, type: directory}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -1983,34 +1971,6 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
-
-  '@halfcopilot/config@file:packages/config':
-    dependencies:
-      '@halfcopilot/shared': file:packages/shared
-      zod: 3.25.76
-
-  '@halfcopilot/provider@file:packages/provider(ws@8.20.0)(zod@3.25.76)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.36.3
-      '@halfcopilot/config': file:packages/config
-      '@halfcopilot/shared': file:packages/shared
-      openai: 4.104.0(ws@8.20.0)(zod@3.25.76)
-    transitivePeerDependencies:
-      - encoding
-      - ws
-      - zod
-
-  '@halfcopilot/shared@file:packages/shared': {}
-
-  '@halfcopilot/tools@file:packages/tools(ws@8.20.0)(zod@3.25.76)':
-    dependencies:
-      '@halfcopilot/config': file:packages/config
-      '@halfcopilot/provider': file:packages/provider(ws@8.20.0)(zod@3.25.76)
-      '@halfcopilot/shared': file:packages/shared
-    transitivePeerDependencies:
-      - encoding
-      - ws
-      - zod
 
   '@humanfs/core@0.19.2':
     dependencies:

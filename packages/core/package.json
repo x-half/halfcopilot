@@ -12,10 +12,10 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@halfcopilot/config": "file:../config",
-    "@halfcopilot/provider": "file:../provider",
-    "@halfcopilot/shared": "file:../shared",
-    "@halfcopilot/tools": "file:../tools"
+    "@halfcopilot/config": "workspace:*",
+    "@halfcopilot/provider": "workspace:*",
+    "@halfcopilot/shared": "workspace:*",
+    "@halfcopilot/tools": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
