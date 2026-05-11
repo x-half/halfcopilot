@@ -137,7 +137,7 @@ export class PermissionChecker {
 // bash 命令的细粒度权限
 const BASH_SAFE_PATTERNS = [
   'ls', 'cat', 'head', 'tail', 'grep', 'find', 'pwd',
-  'echo', 'which', 'node --version', 'npm --version',
+  'echo', 'which', 'node --version', 'pnpm --version',
   'git status', 'git log', 'git diff', 'git branch',
 ];
 

@@ -37,26 +37,14 @@ function copyDir(src, dest) {
 }
 
 console.log('╔══════════════════════════════════════════════════╗');
-console.log('║         Building HalfCopilot for npm             ║');
+console.log('║         Bundling HalfCopilot for npm             ║');
 console.log('╚══════════════════════════════════════════════════╝');
 console.log('');
-
-// Step 1: Build all packages
-console.log('1️⃣  Building packages...');
-try {
-  execSync('npx tsc --build packages/shared packages/config packages/provider packages/tools packages/core packages/memory packages/mcp packages/skills packages/cli', {
-    cwd: rootDir,
-    stdio: 'inherit'
-  });
-  console.log('   ✓ Build complete');
-} catch (err) {
-  console.error('   ✗ Build failed:', err.message);
-  process.exit(1);
-}
-
-// Step 2: Create dist directory with all compiled code
+console.log('   (Assumes `pnpm build` was already run)');
 console.log('');
-console.log('2️⃣  Bundling distribution...');
+
+// Step 1: Create dist directory with all compiled code
+console.log('1️⃣  Bundling distribution...');
 
 const distDir = join(npmDir, 'dist');
 if (existsSync(distDir)) {
@@ -352,13 +340,13 @@ console.log('   ✓ Postinstall script created');
 
 console.log('');
 console.log('╔══════════════════════════════════════════════════╗');
-console.log('║              Build Complete! ✅                  ║');
+console.log('║              Bundled! ✅                         ║');
 console.log('╚══════════════════════════════════════════════════╝');
 console.log('');
-console.log('To publish to npm:');
-console.log('  cd npm && npm publish');
+console.log('To publish:');
+console.log('  cd npm && pnpm publish');
 console.log('');
 console.log('To test locally:');
-console.log('  cd npm && npm link');
+console.log('  cd npm && pnpm link');
 console.log('  halfcop');
 console.log('');

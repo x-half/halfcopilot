@@ -71,7 +71,7 @@ file content here
 
 ```
 ```run
-command: npm test
+command: pnpm test
 timeout: 30000
 ```
 ```
@@ -506,7 +506,7 @@ interface ParseError {
 
 ```typescript
 // 单行命令支持
-const INLINE_RUN = /^!\s*(.+)$/;  // !npm test → run: npm test
+const INLINE_RUN = /^!\s*(.+)$/;  // !pnpm test → run: pnpm test
 const INLINE_READ = /^@\s*(.+)$/;  // @src/foo.ts → read: src/foo.ts
 ```
 

@@ -115,13 +115,13 @@ class StreamingMarkdownRenderer {
 ```
 状态 1: executing（执行中）
 ┌─ 🔧 bash ──────────────────────────────────────┐
-│ npm test                                         │
+│ pnpm test                                         │
 │ ⠋ running...                                     │
 └──────────────────────────────────────────────────┘
 
 状态 2: completed（完成）
 ┌─ ✅ bash ──────────────────────────────────────┐
-│ npm test                                         │
+│ pnpm test                                         │
 │ 12 tests passed (2.3s)                           │
 └──────────────────────────────────────────────────┘
 
@@ -144,7 +144,7 @@ class StreamingMarkdownRenderer {
 ╭─ ⚠️  Permission Required ────────────────────────────────╮
 │                                                          │
 │  Tool: bash                                              │
-│  Command: npm install express                            │
+│  Command: pnpm add express                            │
 │  Level: unsafe (requires confirmation every time)        │
 │                                                          │
 │  [y] Allow once  [s] Allow for session  [n] Reject      │

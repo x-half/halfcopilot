@@ -438,12 +438,12 @@ function parseEditInstruction(content: string): EditInstruction[] {
 
 **格式 A：RUN 前缀**
 ```
-RUN: npm install
+RUN: pnpm install
 ```
 
 **格式 B：bash 代码块**
 ```bash
-npm install
+pnpm install
 ```
 
 **解析逻辑：**

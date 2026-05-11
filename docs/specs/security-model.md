@@ -60,9 +60,7 @@ interface ToolPermission {
     "whoami",
     "uname -a",
     "node --version",
-    "npm --version",
-    "pnpm --version",
-    "yarn --version"
+    "pnpm --version"
   ]
 }
 ```
@@ -181,7 +179,7 @@ Agent 生成工具调用
 ⚠️  确认执行以下操作：
 
 📝 工具：bash
-📋 命令：npm install -D eslint
+📋 命令：pnpm add -D eslint
 
 ─────────────────────────────────
 [✓] 本次会话不再确认此类操作
@@ -301,7 +299,7 @@ const seccompProfile = {
    {
      "security": {
        "maxTokensPerRequest": 10000,
-       "requireConfirmFor": ["npm publish", "git push"]
+       "requireConfirmFor": ["pnpm publish", "git push"]
      }
    }
    ```
