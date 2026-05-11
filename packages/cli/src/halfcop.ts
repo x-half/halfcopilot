@@ -14,7 +14,7 @@ process.on("warning", (w) => {
 });
 
 import { Command } from "commander";
-import { loadConfig, type HalfCopilotConfig } from "@halfcopilot/config";
+import { loadConfig, saveConfig, type HalfCopilotConfig } from "@halfcopilot/config";
 import cliPkg from "../package.json";
 import { ProviderRegistry } from "@halfcopilot/provider";
 import {
@@ -818,7 +818,6 @@ async function handleCommand(
         opts.model = arg;
         updateStatus("thinking", `Switching to ${arg}...`);
         try {
-          // Re-create agent with new model
           const providerName =
             opts.provider ?? config.defaultProvider ?? "xiaomi";
           const provider = providerRegistry.get(providerName);
@@ -851,6 +850,7 @@ async function handleCommand(
           });
 
           agentRef.current = newAgent;
+          saveConfig({ defaultModel: arg });
           console.log(`  ${c.green}✓ Model: ${arg}${c.reset}`);
           return { newModel: arg };
         } catch (err) {
@@ -884,10 +884,15 @@ async function handleCommand(
             askApproval,
           );
 
+          const providerConfig = config.providers[arg];
+          const defaultModel = providerConfig
+            ? Object.keys(providerConfig.models)[0]
+            : opts.model ?? config.defaultModel ?? "mimo-v2.5-pro";
+
           const newAgent = new AgentLoop({
             provider: newProvider,
             providerName: arg,
-            model: opts.model ?? config.defaultModel ?? "mimo-v2.5-pro",
+            model: defaultModel,
             tools: toolRegistry,
             executor,
             permissions,
@@ -896,8 +901,9 @@ async function handleCommand(
           });
 
           agentRef.current = newAgent;
+          saveConfig({ defaultProvider: arg, defaultModel });
           console.log(`  ${c.green}✓ Provider: ${arg}${c.reset}`);
-          return { newProvider: arg };
+          return { newProvider: arg, newModel: defaultModel };
         } catch (err) {
           console.log(`  ${c.red}✗ Provider not found: ${arg}${c.reset}`);
         }
@@ -919,6 +925,22 @@ async function handleCommand(
       }
       break;
 
+    case "/providers":
+    case "/list":
+      console.log(`\n  ${c.cyan}Configured Providers:${c.reset}\n`);
+      for (const [name, pc] of Object.entries(config.providers)) {
+        const models = Object.keys(pc.models).join(", ");
+        const isDefault = name === config.defaultProvider;
+        console.log(
+          `  ${isDefault ? c.green + "★" : c.white}${c.bold} ${name}${c.reset}`,
+        );
+        console.log(`    ${c.dim}Models: ${models}${c.reset}`);
+        console.log(`    ${c.dim}Base: ${pc.baseUrl ?? "default"}${c.reset}`);
+        if (isDefault) console.log(`    ${c.green}(default)${c.reset}`);
+        console.log("");
+      }
+      break;
+
     case "/clear":
       console.clear();
       printHeader();
@@ -931,6 +953,7 @@ async function handleCommand(
       console.log(
         `  ${c.white}/mode <name>${c.reset}    - Set mode (plan/act/auto/review)`,
       );
+      console.log(`  ${c.white}/list${c.reset}            - List configured providers`);
       console.log(`  ${c.white}/clear${c.reset}           - Clear screen`);
       console.log(`  ${c.white}/help${c.reset}           - Show this help`);
       console.log(`  ${c.white}/exit${c.reset}           - Quit\n`);

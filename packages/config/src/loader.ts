@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { HalfCopilotConfigSchema, type HalfCopilotConfig } from "./schema.js";
@@ -86,6 +86,21 @@ function loadEnvOverrides(): Record<string, unknown> {
     }
   }
   return overrides;
+}
+
+export function saveConfig(
+  partial: Partial<HalfCopilotConfig>,
+  scope: "user" | "project" = "user",
+  projectRoot?: string,
+): void {
+  const configDir = getConfigDir(scope, projectRoot);
+  const configPath = join(configDir, CONFIG_FILE);
+
+  const existing = readJsonFile(configPath) ?? {};
+  const merged = deepMerge(existing, partial as Record<string, unknown>);
+
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf-8");
 }
 
 export function getConfigDir(

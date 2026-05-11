@@ -10,5 +10,5 @@ export {
   type MCPServerConfig,
   type SecurityConfig,
 } from "./schema.js";
-export { loadConfig, getConfigDir } from "./loader.js";
+export { loadConfig, saveConfig, getConfigDir } from "./loader.js";
 export { DEFAULT_CONFIG } from "./defaults.js";
