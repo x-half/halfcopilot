@@ -1,4 +1,5 @@
 import type { Tool } from "../types.js";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { createFileReadTool } from "./file-read.js";
 import { createFileWriteTool } from "./file-write.js";
 import { createFileEditTool } from "./file-edit.js";
@@ -15,6 +16,10 @@ export function createBuiltinTools(): Tool[] {
     createGrepTool(),
     createGlobTool(),
   ];
+}
+
+export function toLangChainTools(): DynamicStructuredTool[] {
+  return createBuiltinTools().map((t) => t.toLangChain());
 }
 
 export {

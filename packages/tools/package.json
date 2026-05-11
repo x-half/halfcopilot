@@ -14,7 +14,9 @@
   "dependencies": {
     "@halfcopilot/config": "workspace:*",
     "@halfcopilot/provider": "workspace:*",
-    "@halfcopilot/shared": "workspace:*"
+    "@halfcopilot/shared": "workspace:*",
+    "@langchain/core": "^1.1.45",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

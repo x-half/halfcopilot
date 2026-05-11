@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { tool } from "@langchain/core/tools";
 import type {
   Tool,
   ToolContext,
@@ -7,11 +9,13 @@ import type {
 import { PermissionLevel as PL } from "@halfcopilot/tools";
 import type { MCPToolDefinition, MCPToolResult } from "./types.js";
 import type { MCPClientManager } from "./client.js";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
 
 export class MCPToolAdapter implements Tool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  zodSchema: z.ZodObject<any>;
   permissionLevel: PermissionLevel;
 
   private serverName: string;
@@ -25,7 +29,8 @@ export class MCPToolAdapter implements Tool {
     this.name = `${serverName}__${toolDef.name}`;
     this.description = toolDef.description ?? `MCP tool from ${serverName}`;
     this.inputSchema = toolDef.inputSchema;
-    this.permissionLevel = PL.UNSAFE; // MCP tools default to unsafe
+    this.zodSchema = z.object({});
+    this.permissionLevel = PL.UNSAFE;
     this.serverName = serverName;
     this.manager = manager;
   }
@@ -56,6 +61,25 @@ export class MCPToolAdapter implements Tool {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  toLangChain(): DynamicStructuredTool {
+    return tool(
+      async (_input: Record<string, unknown>) => {
+        const result = await this.execute(_input, {
+          projectRoot: "",
+          workingDirectory: "",
+          signal: new AbortController().signal,
+          sessionId: "",
+        } as ToolContext);
+        return result.output;
+      },
+      {
+        name: this.name,
+        description: this.description,
+        schema: this.zodSchema,
+      },
+    );
   }
 }
 

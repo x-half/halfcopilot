@@ -1,4 +1,6 @@
 import type { ToolDef } from "@halfcopilot/provider";
+import { z } from "zod";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
 
 export enum PermissionLevel {
   SAFE = "safe",
@@ -20,12 +22,13 @@ export interface ToolResult {
 }
 
 export interface Tool extends ToolDef {
+  zodSchema: z.ZodObject<any>;
   permissionLevel: PermissionLevel;
   execute(
     input: Record<string, unknown>,
     context: ToolContext,
   ): Promise<ToolResult>;
-  toProviderFormat?(): ToolDef;
+  toLangChain(): DynamicStructuredTool;
 }
 
 export interface PermissionResult {

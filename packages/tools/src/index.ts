@@ -10,6 +10,7 @@ export { ToolExecutor } from "./executor.js";
 export { PermissionChecker, type PermissionConfig } from "./permission.js";
 export {
   createBuiltinTools,
+  toLangChainTools,
   createFileReadTool,
   createFileWriteTool,
   createFileEditTool,

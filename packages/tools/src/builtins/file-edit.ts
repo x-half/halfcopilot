@@ -1,70 +1,98 @@
+import { z } from "zod";
+import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
-import { readFile, writeFile } from "node:fs/promises";
+import { tool } from "@langchain/core/tools";
+
+const schema = z.object({
+  path: z.string().describe("Absolute path to the file to edit"),
+  oldText: z
+    .string()
+    .describe("Exact text string to find and replace (case-sensitive)"),
+  newText: z
+    .string()
+    .describe("Replacement text that will replace oldText"),
+  replaceAll: z
+    .boolean()
+    .optional()
+    .describe("Replace all occurrences (default: false, only first occurrence)"),
+});
+
+async function executeFn(
+  input: z.infer<typeof schema>,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const absPath = resolve(context.workingDirectory, input.path);
+  const content = await readFile(absPath, "utf-8");
+
+  const { oldText, newText, replaceAll } = input;
+
+  if (!content.includes(oldText)) {
+    return {
+      output: "",
+      error: `String not found in file: "${oldText.substring(0, 100)}"`,
+    };
+  }
+
+  const result = replaceAll
+    ? content.replaceAll(oldText, newText)
+    : content.replace(oldText, newText);
+
+  const count = replaceAll
+    ? (content.match(new RegExp(oldText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length
+    : 1;
+
+  await writeFile(absPath, result, "utf-8");
+  return {
+    output: `File updated: ${absPath} (${count} replacement${count > 1 ? "s" : ""})`,
+  };
+}
 
 export function createFileEditTool(): Tool {
-  return {
+  const base: Omit<Tool, "toLangChain"> = {
     name: "file_edit",
-    description: "Replace an exact string in a file with a new string",
+    description:
+      "Replace a specific text string in a file with new text. Uses exact string matching (not regex). By default only replaces the first occurrence; use replaceAll=true for all occurrences. Best for targeted edits to existing files without rewriting the entire file.",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string", description: "Absolute path to the file" },
-        oldText: {
-          type: "string",
-          description: "Exact text to find and replace",
-        },
+        oldText: { type: "string", description: "Exact text to find and replace" },
         newText: { type: "string", description: "Replacement text" },
         replaceAll: { type: "boolean", description: "Replace all occurrences" },
       },
       required: ["path", "oldText", "newText"],
     },
+    zodSchema: schema,
     permissionLevel: PermissionLevel.WARN,
     async execute(
       input: Record<string, unknown>,
       context: ToolContext,
     ): Promise<ToolResult> {
-      const { path, oldText, newText, replaceAll } = input as {
-        path: string;
-        oldText: string;
-        newText: string;
-        replaceAll?: boolean;
-      };
-      try {
-        const content = await readFile(path, "utf-8");
+      return executeFn(schema.parse(input), context);
+    },
+  };
 
-        if (!content.includes(oldText)) {
-          return {
-            output: "",
-            error: `Text not found in ${path}: "${oldText.slice(0, 50)}..."`,
-          };
-        }
-
-        let newContent: string;
-        if (replaceAll) {
-          newContent = content.split(oldText).join(newText);
-        } else {
-          const idx = content.indexOf(oldText);
-          if (content.indexOf(oldText, idx + 1) !== -1) {
-            return {
-              output: "",
-              error: `Multiple occurrences found in ${path}. Use replaceAll: true or provide more context.`,
-            };
-          }
-          newContent =
-            content.slice(0, idx) +
-            newText +
-            content.slice(idx + oldText.length);
-        }
-
-        await writeFile(path, newContent, "utf-8");
-        return { output: `Successfully edited ${path}` };
-      } catch (err) {
-        return {
-          output: "",
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
+  return {
+    ...base,
+    toLangChain() {
+      return tool(
+        async (input: z.infer<typeof schema>) => {
+          const result = await executeFn(input, {
+            projectRoot: "",
+            workingDirectory: "",
+            signal: new AbortController().signal,
+            sessionId: "",
+          } as ToolContext);
+          return result.output;
+        },
+        {
+          name: base.name,
+          description: base.description,
+          schema,
+        },
+      );
     },
   };
 }

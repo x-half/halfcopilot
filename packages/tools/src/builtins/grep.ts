@@ -1,11 +1,77 @@
+import { z } from "zod";
+import { exec } from "node:child_process";
+import { resolve } from "node:path";
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
-import { execSync } from "node:child_process";
+import { tool } from "@langchain/core/tools";
+
+const schema = z.object({
+  pattern: z
+    .string()
+    .describe("Regex pattern to search for in file contents"),
+  path: z
+    .string()
+    .optional()
+    .describe("Directory or file path to search in (default: project root)"),
+  glob: z
+    .string()
+    .optional()
+    .describe("File glob pattern to filter which files to search (e.g., '*.ts' or 'src/**/*.ts')"),
+  ignoreCase: z
+    .boolean()
+    .optional()
+    .describe("Perform case-insensitive search (default: false)"),
+  includeLineNumbers: z
+    .boolean()
+    .optional()
+    .describe("Include line numbers in output (default: true)"),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .default(100)
+    .describe("Maximum number of results to return (default: 100)"),
+});
+
+async function executeFn(
+  input: z.infer<typeof schema>,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const searchPath = input.path
+    ? resolve(context.workingDirectory, input.path)
+    : context.workingDirectory;
+
+  const parts = ["rg", "-n", input.pattern, searchPath];
+  if (input.ignoreCase) parts.push("-i");
+  if (input.glob) parts.push("-g", input.glob);
+
+  const cmd = parts.join(" ") + ` | head -${input.maxResults}`;
+
+  return new Promise((resolve) => {
+    exec(
+      cmd,
+      { timeout: 15000, maxBuffer: 5 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (!input.includeLineNumbers && stdout) {
+          const cleaned = stdout.replace(/^[^:]+:\d+:/gm, (m) => m.replace(/:\d+:/, ":"));
+          return resolve({ output: cleaned });
+        }
+        if (stdout) return resolve({ output: stdout });
+        if (error && !stderr) {
+          return resolve({ output: "(no matches found)" });
+        }
+        resolve({ output: "(no matches found)" });
+      },
+    );
+  });
+}
 
 export function createGrepTool(): Tool {
-  return {
+  const base: Omit<Tool, "toLangChain"> = {
     name: "grep",
-    description: "Search for a pattern in files using ripgrep or grep",
+    description:
+      "Search file contents using ripgrep (rg) with regex pattern matching. Returns matching lines with file names and line numbers. Supports case-insensitive search, file type filtering via glob patterns, and result limiting. Fast for searching large codebases.",
     inputSchema: {
       type: "object",
       properties: {
@@ -16,59 +82,35 @@ export function createGrepTool(): Tool {
       },
       required: ["pattern"],
     },
+    zodSchema: schema,
     permissionLevel: PermissionLevel.SAFE,
     async execute(
       input: Record<string, unknown>,
       context: ToolContext,
     ): Promise<ToolResult> {
-      const {
-        pattern,
-        path = ".",
-        glob,
-        ignoreCase,
-      } = input as {
-        pattern: string;
-        path?: string;
-        glob?: string;
-        ignoreCase?: boolean;
-      };
+      return executeFn(schema.parse(input), context);
+    },
+  };
 
-      let cmd = "grep";
-      try {
-        execSync("which rg", { stdio: "ignore" });
-        cmd = "rg";
-      } catch {
-        /* fallback to grep */
-      }
-
-      const args: string[] = [];
-      if (cmd === "rg") {
-        args.push("--no-heading", "-n");
-        if (ignoreCase) args.push("-i");
-        if (glob) args.push("--glob", glob);
-        args.push("--", pattern, path);
-      } else {
-        args.push("-n");
-        if (ignoreCase) args.push("-i");
-        if (glob) args.push("--include", glob);
-        args.push("-r", "--", pattern, path);
-      }
-
-      try {
-        const result = execSync(
-          `${cmd} ${args.map((a) => `'${a}'`).join(" ")}`,
-          {
-            encoding: "utf-8",
-            maxBuffer: 10 * 1024 * 1024,
-            timeout: 30000,
-          },
-        );
-        return { output: result.slice(0, 50000) || "No matches found" };
-      } catch (err: unknown) {
-        const execErr = err as { status?: number; message?: string };
-        if (execErr.status === 1) return { output: "No matches found" };
-        return { output: "", error: execErr.message ?? String(err) };
-      }
+  return {
+    ...base,
+    toLangChain() {
+      return tool(
+        async (input: z.infer<typeof schema>) => {
+          const result = await executeFn(input, {
+            projectRoot: "",
+            workingDirectory: "",
+            signal: new AbortController().signal,
+            sessionId: "",
+          } as ToolContext);
+          return result.output;
+        },
+        {
+          name: base.name,
+          description: base.description,
+          schema,
+        },
+      );
     },
   };
 }

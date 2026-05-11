@@ -15,7 +15,9 @@
     "@halfcopilot/config": "workspace:*",
     "@halfcopilot/provider": "workspace:*",
     "@halfcopilot/shared": "workspace:*",
-    "@halfcopilot/tools": "workspace:*"
+    "@halfcopilot/tools": "workspace:*",
+    "@langchain/core": "^1.1.45",
+    "@langchain/langgraph": "^1.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
