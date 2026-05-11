@@ -1,4 +1,5 @@
 import { StateGraph, END, Annotation, MemorySaver } from "@langchain/langgraph";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -65,11 +66,14 @@ export async function* runAgent(
   userMessage: string,
   config: AgentConfig,
 ): AsyncGenerator<AgentEvent> {
-  // Build tool defs
-  const llmTools: Array<{ name: string; description: string; inputSchema: any }> = [];
+  // Build LangChain tools, but provider expects { name, description, inputSchema }
+  const lcTools: DynamicStructuredTool[] = [];
+  const llmTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
   for (const name of config.tools.list()) {
     if (config.mode === "plan" && !PLAN_SAFE_TOOLS.includes(name)) continue;
     const tool = config.tools.get(name);
+    lcTools.push(tool.toLangChain());
+    // Use the original inputSchema (JSON Schema) — Zod schema is for LangChain
     llmTools.push({ name, description: tool.description, inputSchema: tool.inputSchema });
   }
 
