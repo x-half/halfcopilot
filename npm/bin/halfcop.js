@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { join } from "path";
 import { pathToFileURL } from "url";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = join(__filename, "..");
 
 const mainPath = join(
   __dirname,
@@ -16,10 +16,9 @@ const mainPath = join(
   "dist",
   "halfcop.js",
 );
-const mainModule = pathToFileURL(mainPath).href;
 
 try {
-  await import(mainModule);
+  await import(pathToFileURL(mainPath).href);
 } catch (err) {
   console.error("Failed to start HalfCopilot:", err.message);
   process.exit(1);

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { Command } from "commander";
+import pkg from "../../package.json";
+
+const version = pkg.version;
 
 describe("CLI program structure", () => {
   it("should create a program with basic metadata", () => {
@@ -7,7 +10,7 @@ describe("CLI program structure", () => {
     program
       .name("halfcop")
       .description("HalfCopilot — Multi-model Agent Framework CLI")
-      .version("1.1.8");
+      .version(version);
 
     program.command("chat").description("Start interactive chat mode");
     program.command("run <prompt>").description("Run a single prompt");
@@ -32,9 +35,9 @@ describe("CLI program structure", () => {
 
   it("should have correct program metadata", () => {
     const program = new Command();
-    program.name("halfcop").version("1.1.8");
+    program.name("halfcop").version(version);
     expect(program.name()).toBe("halfcop");
-    expect(program.version()).toBe("1.1.7");
+    expect(program.version()).toBe(version);
   });
 
   it("should parse chat command options", () => {

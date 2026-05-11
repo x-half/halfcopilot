@@ -17,14 +17,14 @@ const __dirname = dirname(__filename);
 const rootDir = join(__dirname, "..");
 const npmDir = join(rootDir, "npm");
 
-function copyDir(src, dest) {
+function copyJs(src, dest) {
   if (!existsSync(dest)) mkdirSync(dest, { recursive: true });
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     const srcPath = join(src, entry.name);
     const destPath = join(dest, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name !== "node_modules") copyDir(srcPath, destPath);
-    } else {
+      if (entry.name !== "node_modules") copyJs(srcPath, destPath);
+    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".mjs")) {
       copyFileSync(srcPath, destPath);
     }
   }
@@ -53,7 +53,7 @@ if (existsSync(distDir)) {
 console.log("1\uFE0F\u20E3  Copying CLI bundle...");
 const cliDist = join(rootDir, "packages/cli/dist");
 const destCliDist = join(distDir, "packages/cli/dist");
-copyDir(cliDist, destCliDist);
+copyJs(cliDist, destCliDist);
 console.log("   \u2713 CLI dist copied");
 
 // Step 2: Create main index.js re-export
@@ -72,11 +72,33 @@ const binDir = join(npmDir, "bin");
 if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true });
 
 const binContent = `#!/usr/bin/env node
-const { join } = require("path");
-require(join(__dirname, "..", "dist", "packages", "cli", "dist", "halfcop.js"));
+
+import { join } from "path";
+import { pathToFileURL } from "url";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = join(__filename, "..");
+
+const mainPath = join(
+  __dirname,
+  "..",
+  "dist",
+  "packages",
+  "cli",
+  "dist",
+  "halfcop.js",
+);
+
+try {
+  await import(pathToFileURL(mainPath).href);
+} catch (err) {
+  console.error("Failed to start HalfCopilot:", err.message);
+  process.exit(1);
+}
 `;
 
-writeFileSync(join(binDir, "halfcop.cjs"), binContent);
+writeFileSync(join(binDir, "halfcop.js"), binContent);
 console.log("   \u2713 Bin setup complete");
 
 // Step 4: Update npm/package.json with current version

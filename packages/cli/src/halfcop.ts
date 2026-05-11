@@ -15,6 +15,7 @@ process.on("warning", (w) => {
 
 import { Command } from "commander";
 import { loadConfig, type HalfCopilotConfig } from "@halfcopilot/config";
+import cliPkg from "../package.json";
 import { ProviderRegistry } from "@halfcopilot/provider";
 import {
   ToolRegistry,

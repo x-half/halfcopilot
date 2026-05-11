@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     halfcop: 'src/halfcop.ts',
   },
-  format: ['cjs'],
+  format: ['esm'],
   bundle: true,
   dts: false,
   platform: 'node',
