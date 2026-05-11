@@ -2,7 +2,7 @@ import type { Provider } from "./base.js";
 import { OpenAICompatibleProvider } from "./openai.js";
 import { AnthropicProvider } from "./anthropic.js";
 import type { HalfCopilotConfig } from "@halfcopilot/config";
-import { ProviderError } from "@halfcopilot/shared";
+import { ProviderError, logger } from "@halfcopilot/shared";
 
 export class ProviderRegistry {
   private providers = new Map<string, Provider>();
@@ -63,8 +63,7 @@ export class ProviderRegistry {
           this.register(name, provider);
         }
       } catch (err) {
-        // Skip providers that fail to initialize
-        // console.warn(`Warning: Failed to initialize provider "${name}": ${err}`);
+        logger.warn(`Failed to initialize provider "${name}": ${err}`);
       }
     }
   }

@@ -1,50 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { join } from "node:path";
 
-const USER_HOME = "/home/user";
-
-vi.mock("node:fs", () => {
+const { mem } = vi.hoisted(() => {
   const mem = new Map<string, string>();
-  return {
-    readFileSync: (path: string) => {
-      if (!mem.has(path)) throw new Error("ENOENT");
-      return mem.get(path)!;
-    },
-    writeFileSync: (path: string, content: string) => {
-      mem.set(path, content);
-    },
-    mkdirSync: () => {},
-    existsSync: (path: string) => mem.has(path),
-    readdirSync: (path: string) => {
-      const prefix = path.replace(/\\/g, "/");
-      const entries: string[] = [];
-      for (const key of mem.keys()) {
-        const normalized = key.replace(/\\/g, "/");
-        if (
-          normalized.startsWith(prefix + "/") ||
-          normalized.startsWith(prefix.replace(/\/$/, ""))
-        ) {
-          const rel = normalized.slice(prefix.length).replace(/^\//, "");
-          if (rel && !rel.includes("/")) entries.push(rel);
-        }
-      }
-      return entries;
-    },
-    rmdirSync: () => {},
-    statSync: () => ({ size: 50 }),
-    mkdirSync: () => {},
-  };
+  return { mem };
 });
+
+vi.mock("node:fs", () => ({
+  mkdirSync: () => {},
+  rmdirSync: () => {},
+}));
+
+vi.mock("node:fs/promises", () => ({
+  mkdir: () => Promise.resolve(),
+  writeFile: (_path: string, content: string) => {
+    mem.set(_path, content);
+    return Promise.resolve();
+  },
+  readFile: (path: string) => {
+    if (!mem.has(path)) return Promise.reject(new Error("ENOENT"));
+    return Promise.resolve(mem.get(path)!);
+  },
+  readdir: (_path: string) => {
+    const prefix = _path.replace(/\\/g, "/");
+    const entries: string[] = [];
+    for (const key of mem.keys()) {
+      const normalized = key.replace(/\\/g, "/");
+      if (
+        normalized.startsWith(prefix + "/") ||
+        normalized.startsWith(prefix.replace(/\/$/, ""))
+      ) {
+        const rel = normalized.slice(prefix.length).replace(/^\//, "");
+        if (rel && !rel.includes("/")) entries.push(rel);
+      }
+    }
+    return Promise.resolve(entries);
+  },
+  stat: () => Promise.resolve({ size: 50 }),
+}));
 
 vi.mock("node:os", () => ({ homedir: () => "/home/user" }));
 
 import { MemoryStore } from "../store.js";
-import type { MemoryEntry } from "../types.js";
 
 describe("MemoryStore", () => {
   let store: MemoryStore;
 
   beforeEach(() => {
+    mem.clear();
     store = new MemoryStore("/project");
   });
 
@@ -112,10 +114,10 @@ describe("MemoryStore", () => {
 
   it("should return correct paths", () => {
     expect(store.getUserMemoryPath()).toBe(
-      join("/home/user", ".halfcopilot", "memory"),
+      "/home/user/.halfcopilot/memory",
     );
     expect(store.getProjectMemoryPath()).toBe(
-      join("/project", ".halfcopilot", "memory"),
+      "/project/.halfcopilot/memory",
     );
   });
 });

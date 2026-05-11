@@ -7,5 +7,6 @@ dist/
 .env.local
 .halfcopilot/
 coverage/
+*.tgz
 package-lock.json
 npm/.npmrc

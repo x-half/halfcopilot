@@ -21,17 +21,10 @@ export class ConversationManager {
   }
 
   private estimateTokens(text: string): number {
-    let tokens = 0;
-    for (const char of text) {
-      if (/[\u4e00-\u9fff]/.test(char)) {
-        tokens += 1;
-      } else if (/\s/.test(char)) {
-        tokens += 0.25;
-      } else {
-        tokens += 0.25;
-      }
-    }
-    return Math.ceil(tokens);
+    const cjkCount = (text.match(/[\u4e00-\u9fff\uff00-\uffef\u3000-\u303f]/g) || []).length;
+    const nonCjkText = text.replace(/[\u4e00-\u9fff\uff00-\uffef\u3000-\u303f]/g, " ");
+    const words = nonCjkText.split(/\s+/).filter(Boolean).length;
+    return Math.ceil(cjkCount * 1.5 + words * 1.3);
   }
 
   getTokenCount(): number {

@@ -2,7 +2,6 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    index: 'src/index.ts',
     halfcop: 'src/halfcop.ts',
   },
   format: ['cjs'],
@@ -11,4 +10,5 @@ export default defineConfig({
   platform: 'node',
   splitting: false,
   noExternal: [/@halfcopilot\//],
+  external: ['ink', 'react', 'react-devtools-core'],
 })

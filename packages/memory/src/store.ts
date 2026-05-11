@@ -1,15 +1,8 @@
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-  readdirSync,
-  rmdirSync,
-  statSync,
-} from "node:fs";
+import { mkdirSync, rmdirSync } from "node:fs";
+import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-import type { MemoryType, MemoryEntry, MemorySummary } from "./types.js";
+import type { MemoryType, MemorySummary } from "./types.js";
 
 export class MemoryStore {
   private projectRoot: string;
@@ -27,16 +20,13 @@ export class MemoryStore {
   }
 
   async load(): Promise<MemorySummary> {
-    const userMemory = this.readMemoryFile(this.getUserMemoryPath(), "user.md");
-    const feedbackMemory = this.readMemoryFile(
-      this.getUserMemoryPath(),
-      "feedback.md",
-    );
-    const projectMemory = this.readMemoryFile(
-      this.getProjectMemoryPath(),
-      "project.md",
-    );
-    const references = this.readReferences();
+    const [userMemory, feedbackMemory, projectMemory, references] =
+      await Promise.all([
+        this.readMemoryFile(this.getUserMemoryPath(), "user.md"),
+        this.readMemoryFile(this.getUserMemoryPath(), "feedback.md"),
+        this.readMemoryFile(this.getProjectMemoryPath(), "project.md"),
+        this.readReferences(),
+      ]);
 
     return {
       userContext: userMemory,
@@ -53,8 +43,8 @@ export class MemoryStore {
       const fileName = `${type}.md`;
       const filePath = join(basePath, fileName);
 
-      mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, content, "utf-8");
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, content, "utf-8");
     } finally {
       this.releaseLock(type);
     }
@@ -67,38 +57,38 @@ export class MemoryStore {
       const fileName = `${type}.md`;
       const filePath = join(basePath, fileName);
 
-      mkdirSync(dirname(filePath), { recursive: true });
+      await mkdir(dirname(filePath), { recursive: true });
 
-      const existing = existsSync(filePath)
-        ? readFileSync(filePath, "utf-8")
-        : "";
+      const existing = await this.tryReadFile(filePath);
       const newContent = existing ? `${existing}\n\n${entry}` : entry;
-      writeFileSync(filePath, newContent, "utf-8");
+      await writeFile(filePath, newContent, "utf-8");
 
-      this.archiveIfNeeded(filePath);
+      await this.archiveIfNeeded(filePath);
     } finally {
       this.releaseLock(type);
     }
   }
 
-  private archiveIfNeeded(filePath: string): void {
-    if (!existsSync(filePath)) return;
+  private async archiveIfNeeded(filePath: string): Promise<void> {
+    try {
+      const stats = await stat(filePath);
+      if (stats.size <= 100 * 1024) return;
 
-    const stats = statSync(filePath);
-    if (stats.size <= 100 * 1024) return;
+      const content = await readFile(filePath, "utf-8");
+      const lines = content.split("\n");
+      const halfIndex = Math.floor(lines.length / 2);
+      const archiveLines = lines.slice(0, halfIndex);
+      const remainingLines = lines.slice(halfIndex);
 
-    const content = readFileSync(filePath, "utf-8");
-    const lines = content.split("\n");
-    const halfIndex = Math.floor(lines.length / 2);
-    const archiveLines = lines.slice(0, halfIndex);
-    const remainingLines = lines.slice(halfIndex);
+      const archiveDir = join(dirname(filePath), "archive");
+      await mkdir(archiveDir, { recursive: true });
 
-    const archiveDir = join(dirname(filePath), "archive");
-    mkdirSync(archiveDir, { recursive: true });
-
-    const archiveFile = join(archiveDir, `${Date.now()}.md`);
-    writeFileSync(archiveFile, archiveLines.join("\n"), "utf-8");
-    writeFileSync(filePath, remainingLines.join("\n"), "utf-8");
+      const archiveFile = join(archiveDir, `${Date.now()}.md`);
+      await writeFile(archiveFile, archiveLines.join("\n"), "utf-8");
+      await writeFile(filePath, remainingLines.join("\n"), "utf-8");
+    } catch {
+      // Ignore if file doesn't exist yet
+    }
   }
 
   async clear(type: MemoryType): Promise<void> {
@@ -122,9 +112,9 @@ export class MemoryStore {
       const fileName = `${type}.md`;
       const filePath = join(basePath, fileName);
 
-      if (!existsSync(filePath)) continue;
+      const content = await this.tryReadFile(filePath);
+      if (!content) continue;
 
-      const content = readFileSync(filePath, "utf-8");
       const lines = content.split("\n");
       for (const line of lines) {
         if (line.toLowerCase().includes(keyword.toLowerCase())) {
@@ -134,25 +124,23 @@ export class MemoryStore {
     }
 
     const refDir = join(this.getProjectMemoryPath(), "references");
-    if (existsSync(refDir)) {
-      try {
-        const files = readdirSync(refDir).filter((f) => f.endsWith(".md"));
-        for (const file of files) {
-          const content = readFileSync(join(refDir, file), "utf-8");
-          const lines = content.split("\n");
-          for (const line of lines) {
-            if (line.toLowerCase().includes(keyword.toLowerCase())) {
-              results.push({
-                type: "reference" as MemoryType,
-                content,
-                matchedLine: line,
-              });
-            }
+    try {
+      const files = (await readdir(refDir)).filter((f) => f.endsWith(".md"));
+      for (const file of files) {
+        const content = await readFile(join(refDir, file), "utf-8");
+        const lines = content.split("\n");
+        for (const line of lines) {
+          if (line.toLowerCase().includes(keyword.toLowerCase())) {
+            results.push({
+              type: "reference" as MemoryType,
+              content,
+              matchedLine: line,
+            });
           }
         }
-      } catch {
-        // Ignore errors
       }
+    } catch {
+      // Ignore if ref directory doesn't exist
     }
 
     return results;
@@ -203,28 +191,34 @@ ${summary.references.length > 0 ? summary.references.join("\n") : "No references
     }
   }
 
-  private readMemoryFile(basePath: string, fileName: string): string {
+  private async readMemoryFile(
+    basePath: string,
+    fileName: string,
+  ): Promise<string> {
     const filePath = join(basePath, fileName);
-    if (!existsSync(filePath)) return "";
+    return (await this.tryReadFile(filePath)) ?? "";
+  }
+
+  private async readReferences(): Promise<string[]> {
+    const refDir = join(this.getProjectMemoryPath(), "references");
     try {
-      return readFileSync(filePath, "utf-8");
+      const files = (await readdir(refDir)).filter((f) => f.endsWith(".md"));
+      return Promise.all(
+        files.map(async (f) => {
+          const content = await readFile(join(refDir, f), "utf-8");
+          return `### ${f}\n${content}`;
+        }),
+      );
     } catch {
-      return "";
+      return [];
     }
   }
 
-  private readReferences(): string[] {
-    const refDir = join(this.getProjectMemoryPath(), "references");
-    if (!existsSync(refDir)) return [];
-
+  private async tryReadFile(filePath: string): Promise<string | null> {
     try {
-      const files = readdirSync(refDir).filter((f) => f.endsWith(".md"));
-      return files.map((f) => {
-        const content = readFileSync(join(refDir, f), "utf-8");
-        return `### ${f}\n${content}`;
-      });
+      return await readFile(filePath, "utf-8");
     } catch {
-      return [];
+      return null;
     }
   }
 }

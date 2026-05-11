@@ -31,7 +31,7 @@ const program = new Command();
 program
   .name("halfcop")
   .description("HalfCopilot — Multi-model Agent Framework CLI")
-  .version("1.0.30");
+  .version("1.1.6");
 
 interface AgentOptions {
   model?: string;
@@ -1023,7 +1023,30 @@ program
   .option("-p, --provider <provider>", "Provider to use")
   .option("--mode <mode>", "Agent mode (plan/review/act/auto)", "auto")
   .option("--hybrid", "Enable hybrid mode")
+  .option("--tui", "Enable TUI mode (requires ink/React)")
   .action(async (options) => {
+    if (options.tui) {
+      try {
+        const { render } = await import("ink");
+        const React = await import("react");
+        const { App } = await import("./tui/app.js");
+        const { agent, providerName, config } = createAgent(options);
+        const { waitUntilExit } = render(
+          React.createElement(App, {
+            agent,
+            providerName,
+            model: options.model ?? config.defaultModel ?? "mimo-v2.5-pro",
+            mode: options.mode ?? "auto",
+          }),
+        );
+        await waitUntilExit();
+        return;
+      } catch {
+        console.log(
+          `  ${c.yellow}TUI mode not available, falling back to simple mode${c.reset}\n`,
+        );
+      }
+    }
     await runInteractive(options);
   });
 
@@ -1365,7 +1388,40 @@ program
     rl.close();
   });
 
-// Default action: when no command given, start interactive chat
+program
+  .command("config")
+  .description("Show current configuration")
+  .action(() => {
+    try {
+      const config = loadConfig();
+      console.log(`\n  ${c.cyan}Current Configuration:${c.reset}\n`);
+      console.log(JSON.stringify(config, null, 2));
+      console.log("");
+    } catch (err) {
+      console.log(
+        `  ${c.red}✗ ${err instanceof Error ? err.message : err}${c.reset}`,
+      );
+    }
+  });
+
+program
+  .command("providers")
+  .description("List available providers")
+  .action(() => {
+    try {
+      const config = loadConfig();
+      console.log(`\n  ${c.cyan}Available Providers:${c.reset}\n`);
+      for (const name of Object.keys(config.providers)) {
+        console.log(`  ${c.green}• ${c.bold}${name}${c.reset}`);
+      }
+      console.log("");
+    } catch (err) {
+      console.log(
+        `  ${c.red}✗ ${err instanceof Error ? err.message : err}${c.reset}`,
+      );
+    }
+  });
+
 program.action(async () => {
   await runInteractive({});
 });
