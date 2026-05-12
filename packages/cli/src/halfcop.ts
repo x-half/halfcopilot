@@ -95,6 +95,9 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Global spinner handle so askApproval can pause it during permission dialog
+let _globalSpinner: { start: (msg?: string) => void; stop: () => void } | null = null;
+
 // Braille dot spinning animation — always occupies its own line (Layer A)
 function createThinkingAnimation() {
   let interval: NodeJS.Timeout | null = null;
@@ -438,6 +441,8 @@ async function askApproval(
   toolName: string,
   _input: Record<string, unknown>,
 ): Promise<boolean> {
+  // Stop spinner BEFORE drawing panel — prevents \r interference
+  _globalSpinner?.stop();
   inputMode = "approval";
   const inputStr = JSON.stringify(_input);
   const truncated = inputStr.length > 80 ? inputStr.substring(0, 80) + "…" : inputStr;
@@ -693,6 +698,7 @@ async function runInteractive(options: AgentOptions = {}) {
     process.stdin.on("keypress", onKeypress);
 
     const thinking = createThinkingAnimation();
+    _globalSpinner = thinking;
     thinking.start();
 
     let responseStarted = false;
@@ -905,6 +911,7 @@ async function runInteractive(options: AgentOptions = {}) {
       );
       updateStatus("error", msg.slice(0, 50));
     } finally {
+      _globalSpinner = null;
       process.stdin.removeListener("keypress", onKeypress);
       isProcessing = false;
       currentTurn++;
