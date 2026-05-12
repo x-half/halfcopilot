@@ -1,6 +1,6 @@
 {
   "name": "halfcopilot",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "HalfCopilot — Multi-model Agent Framework CLI",
   "type": "module",
   "bin": {

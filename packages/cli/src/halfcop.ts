@@ -480,9 +480,7 @@ async function askApproval(
     };
 
     const cleanup = () => {
-      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-        try { process.stdin.setRawMode(false); } catch {}
-      }
+      // Don't disable raw mode — readline manages it internally
       process.stdin.removeListener("data", dataHandler);
       // Clear the permission panel lines
       clearLines(PERM_BOX_HEIGHT);
