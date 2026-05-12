@@ -95,21 +95,23 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Braille dot spinning animation with layer-aware cursor management
-let _spinnerLine = 0;
-
+// Braille dot spinning animation — always occupies its own line (Layer A)
 function createThinkingAnimation() {
   let interval: NodeJS.Timeout | null = null;
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   let i = 0;
+  let started = false;
 
   const start = (message = "Thinking") => {
     if (interval) return;
-    process.stdout.write(`\r  ${c.cyan}⠋${c.reset} ${c.dim}${message}${c.reset}   `);
+    started = true;
+    // Move spinner to its own line so it never overlaps the prompt
+    process.stdout.write("\n");
+    process.stdout.write(`  ${c.cyan}⠋${c.reset} ${c.dim}${message}${c.reset}`);
     interval = setInterval(() => {
       i++;
       process.stdout.write(
-        `\r  ${c.cyan}${frames[i % frames.length]}${c.reset} ${c.dim}${message}${c.reset}   `,
+        `\r  ${c.cyan}${frames[i % frames.length]}${c.reset} ${c.dim}${message}${c.reset}`,
       );
     }, 80);
   };
@@ -119,8 +121,11 @@ function createThinkingAnimation() {
       clearInterval(interval);
       interval = null;
     }
-    // Clear the spinner line completely
-    process.stdout.write("\r" + " ".repeat(60) + "\r");
+    if (started) {
+      // Clear spinner line: move up, clear entire line, move back
+      process.stdout.write("\x1b[F\x1b[2K");
+      started = false;
+    }
   };
 
   return { start, stop };
@@ -417,8 +422,9 @@ function checkConfig(config: HalfCopilotConfig): boolean {
   return true;
 }
 
-// Input mode state machine: "chat" for normal input, "approval" for permission prompt
+// Input mode state machine: isolates permission input from chat input
 let inputMode: "chat" | "approval" = "chat";
+let _justApproved = false;
 let _resumeChat: (() => void) | null = null;
 
 // Permission keyboard selector: arrow keys + Enter, no echo leak
@@ -620,14 +626,19 @@ async function runInteractive(options: AgentOptions = {}) {
 
   const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
-  // Resume chat after approval completes
-  _resumeChat = () => { ask(); };
+  // Resume chat after approval completes — discards stale input
+  _resumeChat = () => {
+    _justApproved = true;
+    // Defer so readline's buffered input fires first and is discarded
+    setTimeout(() => { _justApproved = false; ask(); }, 20);
+  };
 
   const ask = () => {
     if (inputMode === "approval") return;
 
     rl.question(PROMPT, async (input) => {
-      if (isProcessing || inputMode === "approval") return;
+      // Discard stale input captured during approval
+      if (isProcessing || inputMode === "approval" || _justApproved) return;
       const trimmed = input.trim();
 
       if (!trimmed) {
@@ -720,6 +731,8 @@ async function runInteractive(options: AgentOptions = {}) {
             const chunk = event.content ?? "";
             if (!responseStarted) {
               thinking.stop();
+              // Move to a fresh line for response content (Layer C)
+              process.stdout.write("\n");
             }
             const combined = tBuffer + chunk;
             const openIdx = combined.indexOf("<think>");
