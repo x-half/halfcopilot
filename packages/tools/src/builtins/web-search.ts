@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { get } from "node:https";
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import { PermissionLevel } from "../types.js";
 import { tool } from "@langchain/core/tools";
@@ -15,49 +16,49 @@ const schema = z.object({
     .describe("Maximum number of search results to return (default: 5)"),
 });
 
+function httpsGet(url: string, timeout: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = get(url, { headers: { "User-Agent": "HalfCopilot/1.0" } }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(timeout, () => { req.destroy(); reject(new Error("timeout")); });
+  });
+}
+
 async function executeFn(
   input: z.infer<typeof schema>,
   _context: ToolContext,
 ): Promise<ToolResult> {
+  // Try DuckDuckGo Instant Answer API
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1&skip_disambig=1`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(10000),
-      headers: { "User-Agent": "HalfCopilot/1.0" },
-    });
-    if (!res.ok) {
-      return { output: "", error: `Search failed: ${res.status}` };
-    }
-    const data = await res.json() as any;
+    const text = await httpsGet(url, 10000);
+    const data = JSON.parse(text) as any;
     const lines: string[] = [];
 
-    // Abstract / Description
     if (data.AbstractText) {
       lines.push(`Summary: ${data.AbstractText}`);
       if (data.AbstractSource) lines.push(`Source: ${data.AbstractSource}`);
     }
 
-    // Related topics as search results
     const results = (data.Results ?? []).slice(0, input.maxResults);
     for (const r of results) {
-      const title = r.Text ?? r.FirstURL ?? "(no title)";
-      const link = r.FirstURL ?? "";
-      lines.push(`- ${title}${link ? ` (${link})` : ""}`);
+      lines.push(`- ${r.Text ?? ""}${r.FirstURL ? ` (${r.FirstURL})` : ""}`);
     }
 
-    // Fallback if empty
     if (lines.length === 0) {
-      const fallback = `https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1`;
-      const fRes = await fetch(fallback, {
-        signal: AbortSignal.timeout(10000),
-        headers: { "User-Agent": "HalfCopilot/1.0" },
-      });
-      const fData = await fRes.json() as any;
-      if (fData.AbstractText) {
-        lines.push(`Summary: ${fData.AbstractText}`);
-      }
-      if (fData.RelatedTopics) {
-        for (const t of fData.RelatedTopics.slice(0, input.maxResults)) {
+      // Fallback: try RelatedTopics
+      if (data.RelatedTopics) {
+        for (const t of data.RelatedTopics.slice(0, input.maxResults)) {
           if (t.Text) lines.push(`- ${t.Text}${t.FirstURL ? ` (${t.FirstURL})` : ""}`);
         }
       }
@@ -66,9 +67,10 @@ async function executeFn(
     if (lines.length === 0) lines.push("(no search results found)");
     return { output: lines.join("\n") };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       output: "",
-      error: `Search error: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Web search unavailable: ${msg}. The DuckDuckGo API may be blocked in your network.`,
     };
   }
 }
