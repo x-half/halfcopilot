@@ -17,4 +17,7 @@ export {
   createBashTool,
   createGrepTool,
   createGlobTool,
+  createWebSearchTool,
+  createWeatherTool,
+  createUrlFetchTool,
 } from "./builtins/index.js";

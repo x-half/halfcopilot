@@ -6,6 +6,9 @@ import { createFileEditTool } from "./file-edit.js";
 import { createBashTool } from "./bash.js";
 import { createGrepTool } from "./grep.js";
 import { createGlobTool } from "./glob.js";
+import { createWebSearchTool } from "./web-search.js";
+import { createWeatherTool } from "./weather.js";
+import { createUrlFetchTool } from "./url-fetch.js";
 
 export function createBuiltinTools(): Tool[] {
   return [
@@ -15,6 +18,9 @@ export function createBuiltinTools(): Tool[] {
     createBashTool(),
     createGrepTool(),
     createGlobTool(),
+    createWebSearchTool(),
+    createWeatherTool(),
+    createUrlFetchTool(),
   ];
 }
 
@@ -29,4 +35,7 @@ export {
   createBashTool,
   createGrepTool,
   createGlobTool,
+  createWebSearchTool,
+  createWeatherTool,
+  createUrlFetchTool,
 };

@@ -34,11 +34,21 @@ program
   .description("HalfCopilot — Multi-model Agent Framework CLI")
   .version(cliPkg.version);
 
+type ThoughtLevel = "default" | "verbose" | "debug";
+
 interface AgentOptions {
   model?: string;
   provider?: string;
   mode?: string;
   hybrid?: boolean;
+  verbose?: boolean;
+  debug?: boolean;
+}
+
+function resolveThoughtLevel(opts: AgentOptions): ThoughtLevel {
+  if (opts.debug) return "debug";
+  if (opts.verbose) return "verbose";
+  return "default";
 }
 
 // Beautiful color palette
@@ -396,25 +406,72 @@ function checkConfig(config: HalfCopilotConfig): boolean {
   return true;
 }
 
-// Keypress-based tool approval (no readline question)
+// Input mode state machine: "chat" for normal input, "approval" for permission prompt
+let inputMode: "chat" | "approval" = "chat";
+
+// Tool approval with clean panel, separate from chat input
 async function askApproval(
   toolName: string,
   _input: Record<string, unknown>,
 ): Promise<boolean> {
+  // Stop thinking animation (called from agent loop context)
+  // The caller (agent loop) should stop thinking before calling this
+
+  inputMode = "approval";
+  const inputStr = JSON.stringify(_input);
+  const truncated =
+    inputStr.length > 80 ? inputStr.substring(0, 80) + "…" : inputStr;
+
+  process.stdout.write(
+    `  ${c.yellow}╭─ 🔒 Permission Required ─────────────────────────────╮${c.reset}\n`,
+  );
+  process.stdout.write(
+    `  ${c.yellow}│${c.reset}  Tool: ${c.bold}${toolName}${c.reset}${" ".repeat(Math.max(1, 41 - toolName.length))}${c.yellow}│${c.reset}\n`,
+  );
+  process.stdout.write(
+    `  ${c.yellow}│${c.reset}  Input: ${c.dim}${truncated}${c.reset}${" ".repeat(Math.max(1, 40 - truncated.length))}${c.yellow}│${c.reset}\n`,
+  );
+  process.stdout.write(
+    `  ${c.yellow}│${c.reset}${" ".repeat(50)}${c.yellow}│${c.reset}\n`,
+  );
+  process.stdout.write(
+    `  ${c.yellow}│${c.reset}  ${c.green}[y]${c.reset} Allow once  ${c.blue}[s]${c.reset} Allow session  ${c.red}[n]${c.reset} Reject  ${c.yellow}│${c.reset}\n`,
+  );
+  process.stdout.write(
+    `  ${c.yellow}╰──────────────────────────────────────────────────────╯${c.reset}\n`,
+  );
+  process.stdout.write(`  ${c.green}[权限]${c.reset} `);
+
   return new Promise((resolve) => {
-    process.stdout.write(`  ${c.yellow}Allow ${toolName}? (y/n): ${c.reset}`);
-    const handler = (_str: string | undefined, key: readline.Key) => {
-      if (key.name === "y") {
-        process.stdin.removeListener("keypress", handler);
+    const cleanup = () => {
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(false); } catch {}
+      }
+      process.stdin.removeListener("data", dataHandler);
+    };
+    const dataHandler = (buf: Buffer) => {
+      const key = buf.toString().toLowerCase();
+      if (key === "y" || key === "\x79") {
+        cleanup();
         process.stdout.write("y\n");
+        inputMode = "chat";
         resolve(true);
-      } else if (key.name === "n") {
-        process.stdin.removeListener("keypress", handler);
+      } else if (key === "s" || key === "\x73") {
+        cleanup();
+        process.stdout.write("s（本次会话允许）\n");
+        inputMode = "chat";
+        resolve(true);
+      } else if (key === "n" || key === "\x6e") {
+        cleanup();
         process.stdout.write("n\n");
+        inputMode = "chat";
         resolve(false);
       }
     };
-    process.stdin.on("keypress", handler);
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try { process.stdin.setRawMode(true); } catch {}
+    }
+    process.stdin.on("data", dataHandler);
   });
 }
 
@@ -508,6 +565,7 @@ async function runInteractive(options: AgentOptions = {}) {
   const agentRef: { current: AgentLoop } = { current: agent };
 
   let isProcessing = false;
+  const thoughtLevel: ThoughtLevel = resolveThoughtLevel(options);
 
   // Setup readline for input (readline manages raw mode internally)
   const rl = readline.createInterface({
@@ -520,6 +578,7 @@ async function runInteractive(options: AgentOptions = {}) {
   const ask = () => {
     rl.question(PROMPT, async (input) => {
       if (isProcessing) return;
+      if (inputMode === "approval") { ask(); return; }
       const trimmed = input.trim();
 
       if (!trimmed) {
@@ -581,6 +640,7 @@ async function runInteractive(options: AgentOptions = {}) {
     let loopEnded = false;
     let atLineStart = false;
     let tBuffer = "";
+    let stepCount = 0;
 
     try {
       for await (const event of agentRef.current.run(trimmed)) {
@@ -602,7 +662,9 @@ async function runInteractive(options: AgentOptions = {}) {
               }
               let content = event.content ?? "";
               content = content.replace(/<\/?think>/gi, "").trim();
-              if (content) displayThinkingBox(content);
+              if (content && thoughtLevel !== "default") {
+                displayThinkingBox(content);
+              }
             }
             break;
           case "text": {
@@ -702,6 +764,12 @@ async function runInteractive(options: AgentOptions = {}) {
             if (!responseStarted) {
               thinking.stop();
               responseStarted = true;
+            }
+            if (thoughtLevel === "verbose" || thoughtLevel === "debug") {
+              stepCount++;
+              process.stdout.write(
+                `\n  ${c.dim}── step ${stepCount}: ${event.toolName} ──${c.reset}\n`,
+              );
             }
             const toolInput = event.toolInput ?? {};
             const inputStr = JSON.stringify(toolInput);
@@ -1091,6 +1159,8 @@ program
   .option("-p, --provider <provider>", "Provider to use")
   .option("--mode <mode>", "Agent mode (plan/review/act/auto)", "auto")
   .option("--hybrid", "Enable hybrid mode")
+  .option("--verbose", "Show detailed thinking steps")
+  .option("--debug", "Show full internal reasoning")
   .option("--tui", "Enable TUI mode (requires ink/React)")
   .action(async (options) => {
     if (options.tui) {
@@ -1125,6 +1195,8 @@ program
   .option("-p, --provider <provider>", "Provider to use")
   .option("--mode <mode>", "Agent mode (plan/review/act/auto)", "act")
   .option("--hybrid", "Enable hybrid mode")
+  .option("--verbose", "Show detailed thinking steps")
+  .option("--debug", "Show full internal reasoning")
   .action(async (prompt, options) => {
     await runSingle(prompt, options);
     process.exit(0);

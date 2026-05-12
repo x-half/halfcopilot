@@ -43,5 +43,8 @@ export const TOOL_PERMISSIONS: Record<string, PermissionLevel> = {
   bash: PermissionLevel.UNSAFE,
   grep: PermissionLevel.SAFE,
   glob: PermissionLevel.SAFE,
+  web_search: PermissionLevel.SAFE,
+  weather: PermissionLevel.SAFE,
+  url_fetch: PermissionLevel.SAFE,
   list_files: PermissionLevel.SAFE,
 };

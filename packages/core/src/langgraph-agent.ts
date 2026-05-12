@@ -28,10 +28,19 @@ type GraphState = typeof AgentAnnotation.State;
 
 // ── Helpers ──
 function buildSystemPrompt(model: string, provider: string, mode: string): string {
+  const now = new Date();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeStr = now.toLocaleString("zh-CN", {
+    timeZone: tz, hour: "2-digit", minute: "2-digit",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+
   const base = `You are HalfCopilot, an AI assistant built by half, powered by ${model} (${provider}).
-You have access to tools: file_read, file_write, file_edit, bash, grep, glob.
+You have access to tools: file_read, file_write, file_edit, bash, grep, glob, web_search, weather, url_fetch.
 Reply in the same language as the user. Be concise and direct.`;
   let p = base + `\n\n## Session\n- Model: ${model} (${provider})\n- Mode: ${mode}\n- Built by: half`;
+  p += `\n\n## System Context (auto-injected)\nCurrent time: ${dateStr} ${timeStr}\nTime zone: ${tz}\nOS: ${process.platform}\nWorking directory: ${process.cwd()}\nDate: ${dateStr}`;
   if (mode === "plan") p += "\n\nYou are in PLAN mode. Only read/search tools allowed.";
   return p;
 }
