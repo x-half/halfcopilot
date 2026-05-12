@@ -95,7 +95,9 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Braille dot spinning animation (Claude Code style)
+// Braille dot spinning animation with layer-aware cursor management
+let _spinnerLine = 0;
+
 function createThinkingAnimation() {
   let interval: NodeJS.Timeout | null = null;
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -103,11 +105,12 @@ function createThinkingAnimation() {
 
   const start = (message = "Thinking") => {
     if (interval) return;
+    process.stdout.write(`\r  ${c.cyan}⠋${c.reset} ${c.dim}${message}${c.reset}   `);
     interval = setInterval(() => {
+      i++;
       process.stdout.write(
         `\r  ${c.cyan}${frames[i % frames.length]}${c.reset} ${c.dim}${message}${c.reset}   `,
       );
-      i++;
     }, 80);
   };
 
@@ -116,10 +119,18 @@ function createThinkingAnimation() {
       clearInterval(interval);
       interval = null;
     }
-    process.stdout.write("\r" + " ".repeat(50) + "\r");
+    // Clear the spinner line completely
+    process.stdout.write("\r" + " ".repeat(60) + "\r");
   };
 
   return { start, stop };
+}
+
+// Clear n lines upward from current cursor position
+function clearLines(n: number) {
+  for (let i = 0; i < n; i++) {
+    process.stdout.write("\x1b[F\x1b[2K"); // move up one line, clear it
+  }
 }
 
 // Animated loading indicator
@@ -408,22 +419,27 @@ function checkConfig(config: HalfCopilotConfig): boolean {
 
 // Input mode state machine: "chat" for normal input, "approval" for permission prompt
 let inputMode: "chat" | "approval" = "chat";
+let _resumeChat: (() => void) | null = null;
 
-// Tool approval with clean panel, separate from chat input
+// Permission keyboard selector: arrow keys + Enter, no echo leak
+const PERM_OPTIONS = [
+  { label: "允许一次", value: "once" as const },
+  { label: "本次会话允许", value: "session" as const },
+  { label: "拒绝", value: "reject" as const },
+];
+
 async function askApproval(
   toolName: string,
   _input: Record<string, unknown>,
 ): Promise<boolean> {
-  // Stop thinking animation (called from agent loop context)
-  // The caller (agent loop) should stop thinking before calling this
-
   inputMode = "approval";
   const inputStr = JSON.stringify(_input);
-  const truncated =
-    inputStr.length > 80 ? inputStr.substring(0, 80) + "…" : inputStr;
+  const truncated = inputStr.length > 80 ? inputStr.substring(0, 80) + "…" : inputStr;
+  const PERM_BOX_HEIGHT = 6; // lines the panel occupies
 
+  // Draw permission box
   process.stdout.write(
-    `  ${c.yellow}╭─ 🔒 Permission Required ─────────────────────────────╮${c.reset}\n`,
+    `  ${c.yellow}╭─ 🔒  Permission Required ${"─".repeat(23)}╮${c.reset}\n`,
   );
   process.stdout.write(
     `  ${c.yellow}│${c.reset}  Tool: ${c.bold}${toolName}${c.reset}${" ".repeat(Math.max(1, 41 - toolName.length))}${c.yellow}│${c.reset}\n`,
@@ -435,42 +451,71 @@ async function askApproval(
     `  ${c.yellow}│${c.reset}${" ".repeat(50)}${c.yellow}│${c.reset}\n`,
   );
   process.stdout.write(
-    `  ${c.yellow}│${c.reset}  ${c.green}[y]${c.reset} Allow once  ${c.blue}[s]${c.reset} Allow session  ${c.red}[n]${c.reset} Reject  ${c.yellow}│${c.reset}\n`,
+    `  ${c.yellow}╰──────────────────────────────────────────────────────╯${c.reset}`,
   );
-  process.stdout.write(
-    `  ${c.yellow}╰──────────────────────────────────────────────────────╯${c.reset}\n`,
-  );
-  process.stdout.write(`  ${c.green}[权限]${c.reset} `);
 
   return new Promise((resolve) => {
+    let selected = 0;
+    let buffer = "";
+
+    const render = () => {
+      // Move up to the selector line and redraw
+      const labels = PERM_OPTIONS.map((opt, i) =>
+        i === selected
+          ? `${c.cyan}${c.bold} › ${opt.label} ${c.reset}`
+          : `   ${opt.label}  `,
+      ).join("");
+      process.stdout.write(`\n  ${labels}\n`);
+    };
+
     const cleanup = () => {
       if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try { process.stdin.setRawMode(false); } catch {}
       }
       process.stdin.removeListener("data", dataHandler);
+      // Clear the permission panel lines
+      clearLines(PERM_BOX_HEIGHT);
+      process.stdout.write("\r"); // reset cursor
+      inputMode = "chat";
+      // Restart chat input on next tick
+      setTimeout(() => _resumeChat?.(), 10);
     };
+
     const dataHandler = (buf: Buffer) => {
-      const key = buf.toString().toLowerCase();
-      if (key === "y" || key === "\x79") {
+      const hex = buf.toString("hex");
+      buffer += buf.toString();
+
+      // Arrow keys send 3-byte sequences: 1b 5b 41/42/43/44
+      if (hex === "1b5b43" || hex === "1b5b42") {
+        // Right or Down
+        selected = (selected + 1) % PERM_OPTIONS.length;
+        render();
+        buffer = "";
+      } else if (hex === "1b5b44" || hex === "1b5b41") {
+        // Left or Up
+        selected = (selected - 1 + PERM_OPTIONS.length) % PERM_OPTIONS.length;
+        render();
+        buffer = "";
+      } else if (hex === "0d" || hex === "0a") {
+        // Enter
         cleanup();
-        process.stdout.write("y\n");
-        inputMode = "chat";
-        resolve(true);
-      } else if (key === "s" || key === "\x73") {
-        cleanup();
-        process.stdout.write("s（本次会话允许）\n");
-        inputMode = "chat";
-        resolve(true);
-      } else if (key === "n" || key === "\x6e") {
-        cleanup();
-        process.stdout.write("n\n");
-        inputMode = "chat";
-        resolve(false);
-      }
-    };
+        const chosen = PERM_OPTIONS[selected];
+        if (chosen.value === "reject") {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+        buffer = "";
+        } else if (buf.length === 1 && !hex.startsWith("1b")) {
+          // Single non-escape char — ignore to prevent echo leak
+          buffer = "";
+        }
+      };
+
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       try { process.stdin.setRawMode(true); } catch {}
     }
+    render();
     process.stdin.on("data", dataHandler);
   });
 }
@@ -575,10 +620,14 @@ async function runInteractive(options: AgentOptions = {}) {
 
   const PROMPT = `  ${c.green}${c.bold}❯${c.reset} `;
 
+  // Resume chat after approval completes
+  _resumeChat = () => { ask(); };
+
   const ask = () => {
+    if (inputMode === "approval") return;
+
     rl.question(PROMPT, async (input) => {
-      if (isProcessing) return;
-      if (inputMode === "approval") { ask(); return; }
+      if (isProcessing || inputMode === "approval") return;
       const trimmed = input.trim();
 
       if (!trimmed) {
